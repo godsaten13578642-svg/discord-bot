@@ -1,0 +1,15 @@
+{
+  "name": "civilization-bot",
+  "version": "1.0.0",
+  "description": "Discord Civilization Bot & Website",
+  "main": "index.js",
+  "scripts": {
+    "setup": "npm install && cd backend && npm install && cd ../bot && npm install && cd ../frontend && npm install",
+    "dev": "concurrently \"cd backend && npm run dev\" \"cd bot && npm run dev\" \"cd frontend && npm start\"",
+    "build": "cd backend && npm run build && cd ../frontend && npm run build",
+    "start": "cd backend && npm start"
+  },
+  "dependencies": {
+    "concurrently": "^7.6.0"
+  }
+}

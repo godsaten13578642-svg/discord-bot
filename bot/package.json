@@ -1,0 +1,1 @@
+{"name":"civilization-bot","version":"1.0.0","description":"Discord Civilization Bot","main":"index.js","scripts":{"start":"node src/index.js","dev":"nodemon src/index.js"},"dependencies":{"discord.js":"^14.11.0","axios":"^1.4.0","dotenv":"^16.3.1"}}

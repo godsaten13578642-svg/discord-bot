@@ -1,0 +1,1 @@
+{"name":"civilization-dashboard","version":"1.0.0","description":"Dashboard","dependencies":{"react":"^18.2.0","react-dom":"^18.2.0","react-router-dom":"^6.11.0","axios":"^1.4.0","react-scripts":"5.0.1"},"scripts":{"start":"PORT=3000 react-scripts start","build":"react-scripts build"},"browserslist":{"production":["last 1 chrome version"],"development":["last 1 chrome version"]}}
