@@ -1,5 +1,6 @@
 run = "npm start"
 entrypoint = "backend/src/index.js"
+modules = ["nodejs-20"]
 
 [nix]
 channel = "stable-22_11"
@@ -36,3 +37,6 @@ waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[agent]
+expertMode = true

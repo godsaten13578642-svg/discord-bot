@@ -9,6 +9,12 @@
     "install-all": "npm install && cd backend && npm install && cd ../bot && npm install && cd ../frontend && npm install"
   },
   "dependencies": {
-    "concurrently": "^7.6.0"
+    "ajv": "^8.20.0",
+    "axios": "^1.18.1",
+    "concurrently": "^7.6.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.1",
+    "react-scripts": "^5.0.1"
   }
 }
