@@ -22,21 +22,6 @@ services:
     envVars:
       - key: REACT_APP_API_URL
         value: https://civilization-bot-backend.onrender.com
-    
-  - type: worker
-    name: civilization-bot-discord
-    env: docker
-    dockerfilePath: ./bot/Dockerfile
-    plan: free
-    envVars:
-      - key: DISCORD_BOT_TOKEN
-        sync: false
-      - key: DISCORD_CLIENT_ID
-        sync: false
-      - key: API_URL
-        value: https://civilization-bot-backend.onrender.com
-      - key: NODE_ENV
-        value: production
 
 databases:
   - name: civilization-db
