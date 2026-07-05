@@ -2,7 +2,9 @@ services:
   - type: web
     name: civilization-bot-backend
     env: docker
+    region: oregon
     dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
     plan: free
     envVars:
       - key: PORT
@@ -17,7 +19,9 @@ services:
   - type: web
     name: civilization-bot-frontend
     env: docker
+    region: oregon
     dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
     plan: free
     envVars:
       - key: REACT_APP_API_URL
@@ -26,4 +30,5 @@ services:
 databases:
   - name: civilization-db
     databaseName: civilization_bot
+    region: oregon
     plan: free
