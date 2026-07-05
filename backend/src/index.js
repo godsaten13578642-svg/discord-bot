@@ -4,20 +4,22 @@ require('dotenv').config();
 
 const app = express();
 
-// CORS configuration for global access
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:5000',
-  process.env.FRONTEND_URL,
-  process.env.PRODUCTION_URL
-].filter(Boolean);
-
-app.use(cors({
-  origin: allowedOrigins,
+// CORS configuration - allow all origins in production
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    
+    // In production, allow all origins (or restrict if needed)
+    callback(null, true);
+  },
   credentials: true,
-  optionsSuccessStatus: 200
-}));
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
 
+app.use(cors(corsOptions));
 app.use(express.json());
 
 app.get('/health', (req, res) => {
@@ -57,5 +59,5 @@ app.get('/api/users/:userId', (req, res) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Backend running on port ${PORT}`);
-  console.log(`✅ CORS enabled for: ${allowedOrigins.join(', ')}`);
+  console.log(`✅ CORS enabled for all origins`);
 });
