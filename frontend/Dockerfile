@@ -1,49 +1,16 @@
-# Frontend Dockerfile - Simple Node server
-# Cache bust: 2026-07-05
+# Frontend Dockerfile
 FROM node:18-alpine AS builder
-
 WORKDIR /app
-
-COPY package.json ./
-
+COPY package.json package-lock.json* ./
 RUN npm install --legacy-peer-deps --no-audit --no-fund
-
 COPY public ./public
 COPY src ./src
-
-ENV CI=false
-ENV SKIP_PREFLIGHT_CHECK=true
-ENV NODE_ENV=production
-
+ENV CI=false SKIP_PREFLIGHT_CHECK=true NODE_ENV=production
 RUN npm run build
 
-# Production stage - use Node directly
 FROM node:18-alpine
-
 WORKDIR /app
-
-COPY --from=builder /app/build ./public
-
-# Simple Express server to serve static files
-RUN cat > server.js << 'EOF'
-const express = require('express');
-const path = require('path');
-const app = express();
-
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Frontend running on port ${PORT}`);
-});
-EOF
-
-RUN npm install express
-
+RUN npm install -g http-server
+COPY --from=builder /app/build ./dist
 EXPOSE 3000
-
-CMD ["node", "server.js"]
+CMD ["http-server", "dist", "-p", "3000", "--cors"]

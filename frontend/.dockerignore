@@ -6,6 +6,5 @@ npm-debug.log
 .env.local
 .env.*.local
 dist
-build
 .next
 .nuxt
