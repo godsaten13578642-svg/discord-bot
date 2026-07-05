@@ -1,0 +1,12 @@
+run = "npm start"
+entrypoint = "frontend/src/index.js"
+
+[nix]
+channel = "stable-22_11"
+
+[[ports]]
+localPort = 3000
+externalPort = 3000
+
+[env]
+REACT_APP_API_URL = "https://your-backend-replit-url.replit.dev"
