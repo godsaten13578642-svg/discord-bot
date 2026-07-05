@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: civilization-bot-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: civilization-db
+          property: connectionString
+    
+  - type: web
+    name: civilization-bot-frontend
+    env: docker
+    dockerfilePath: ./frontend/Dockerfile
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://civilization-bot-backend.onrender.com
+    
+  - type: worker
+    name: civilization-bot-discord
+    env: docker
+    dockerfilePath: ./bot/Dockerfile
+    envVars:
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: API_URL
+        value: https://civilization-bot-backend.onrender.com
+      - key: NODE_ENV
+        value: production
+
+databases:
+  - name: civilization-db
+    databaseName: civilization_bot
+    user: postgres
+    plan: free
