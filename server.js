@@ -385,7 +385,7 @@ const token = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;
 if (!token) {
   console.warn('⚠️  No DISCORD_BOT_TOKEN — bot will not start.');
 } else {
-  const { Client, GatewayIntentBits, Events } = require('discord.js');
+  const { Client, GatewayIntentBits, Events, ChannelType, PermissionFlagsBits } = require('discord.js');
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers,
@@ -398,6 +398,177 @@ if (!token) {
 
   const call = (path, opts) => fetch(`http://localhost:${API_PORT}${path}`, opts).then(r => r.json());
   const post = (path, body) => call(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+  // ── Discord Helpers ──────────────────────────────────────────────────────────
+
+  const GROUP_COLORS = {
+    civilization: 0x4287f5,  // blue
+    religion:     0x9b59b6,  // purple
+    team:         0x2ecc71,  // green
+    cult:         0x2c2c2c,  // dark
+  };
+
+  const GROUP_EMOJIS = {
+    civilization: '🏛️',
+    religion:     '✝️',
+    team:         '🛡️',
+    cult:         '🌑',
+  };
+
+  // Creates a Discord role + private category + two channels (general + leader-only)
+  // Returns { roleId, categoryId, channelId, leaderChannelId } or null on failure
+  async function setupDiscordGroup(guild, groupType, groupName, leaderId) {
+    try {
+      const emoji = GROUP_EMOJIS[groupType] || '📌';
+      const color = GROUP_COLORS[groupType] || 0x99aab5;
+      const safeName = groupName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').slice(0, 90);
+
+      // 1. Create the role
+      const role = await guild.roles.create({
+        name: `${emoji} ${groupName}`,
+        color,
+        mentionable: true,
+        reason: `Auto-created for ${groupType}: ${groupName}`,
+      });
+
+      // 2. Create a private category — hidden from @everyone, visible to role
+      const category = await guild.channels.create({
+        name: `${emoji} ${groupName}`,
+        type: ChannelType.GuildCategory,
+        permissionOverwrites: [
+          { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+          {
+            id: role.id,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ReadMessageHistory,
+              PermissionFlagsBits.AttachFiles,
+              PermissionFlagsBits.EmbedLinks,
+              PermissionFlagsBits.AddReactions,
+              PermissionFlagsBits.UseExternalEmojis,
+            ],
+          },
+        ],
+      });
+
+      // 3. General channel for all members
+      const channel = await guild.channels.create({
+        name: `${safeName}-general`,
+        type: ChannelType.GuildText,
+        parent: category.id,
+        topic: `General chat for ${groupName}`,
+        permissionOverwrites: [
+          { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+          {
+            id: role.id,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ReadMessageHistory,
+              PermissionFlagsBits.AttachFiles,
+              PermissionFlagsBits.EmbedLinks,
+              PermissionFlagsBits.AddReactions,
+            ],
+          },
+        ],
+      });
+
+      // 4. Private leader/officer channel — only the leader can see + edit
+      const leaderChannel = await guild.channels.create({
+        name: `${safeName}-leadership`,
+        type: ChannelType.GuildText,
+        parent: category.id,
+        topic: `Private leadership channel for ${groupName} — leaders only`,
+        permissionOverwrites: [
+          { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+          {
+            id: role.id,
+            deny: [PermissionFlagsBits.ViewChannel], // members can't see this by default
+          },
+        ],
+      });
+
+      // 5. Give the leader full control over both channels + the leader channel
+      if (leaderId) {
+        const leaderMember = await guild.members.fetch(leaderId).catch(() => null);
+        if (leaderMember) {
+          await leaderMember.roles.add(role);
+
+          // Leader permissions on general channel
+          await channel.permissionOverwrites.edit(leaderMember, {
+            ViewChannel: true,
+            SendMessages: true,
+            ManageMessages: true,  // pin/delete messages
+            ManageThreads: true,
+            MentionEveryone: true,
+          });
+
+          // Leader permissions on leadership channel (only they can see it initially)
+          await leaderChannel.permissionOverwrites.edit(leaderMember, {
+            ViewChannel: true,
+            SendMessages: true,
+            ManageMessages: true,
+            ManageChannels: true,  // rename/edit the leadership channel
+            ManageThreads: true,
+            MentionEveryone: true,
+          });
+        }
+      }
+
+      console.log(`✅ Discord group set up: ${groupName} (role: ${role.id}, category: ${category.id})`);
+      return { roleId: role.id, categoryId: category.id, channelId: channel.id, leaderChannelId: leaderChannel.id };
+    } catch (err) {
+      console.error(`⚠️  Failed to set up Discord group "${groupName}":`, err.message);
+      return null;
+    }
+  }
+
+  // Assign a group's role to a member
+  async function assignRole(guild, userId, roleId) {
+    if (!guild || !roleId) return;
+    try {
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (!member) return;
+      const role = guild.roles.cache.get(roleId);
+      if (role) await member.roles.add(role);
+    } catch (err) {
+      console.error('assignRole error:', err.message);
+    }
+  }
+
+  // Remove a group's role from a member
+  async function removeRole(guild, userId, roleId) {
+    if (!guild || !roleId) return;
+    try {
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (!member) return;
+      const role = guild.roles.cache.get(roleId);
+      if (role) await member.roles.remove(role);
+    } catch (err) {
+      console.error('removeRole error:', err.message);
+    }
+  }
+
+  // Grant a user access to the leadership channel
+  async function grantLeaderAccess(guild, userId, groupType, groupId) {
+    try {
+      const store = { civilization: data.civilizations, religion: data.religions, team: data.teams, cult: data.cults };
+      const group = store[groupType]?.[groupId];
+      if (!group?.leaderChannelId) return;
+      const ch = await guild.channels.fetch(group.leaderChannelId).catch(() => null);
+      if (!ch) return;
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (!member) return;
+      await ch.permissionOverwrites.edit(member, {
+        ViewChannel: true, SendMessages: true, ManageMessages: true, ManageChannels: true, ManageThreads: true,
+      });
+    } catch (err) {
+      console.error('grantLeaderAccess error:', err.message);
+    }
+  }
+
+  // ── Bot Events ───────────────────────────────────────────────────────────────
 
   client.once(Events.ClientReady, (c) => {
     console.log(`✅ Discord bot logged in as ${c.user.tag}`);
@@ -422,8 +593,9 @@ if (!token) {
     const args = message.content.slice(prefix.length).trim().split(/\s+/);
     const cmd = args.shift().toLowerCase();
     const reply = (msg) => message.reply(msg);
+    const guild = message.guild;
 
-    // ── Profile & Core ──
+    // ── Profile ──
     if (cmd === 'profile') {
       const u = await call(`/api/users/${message.author.id}`);
       const bal = await call(`/api/economy/${message.author.id}`);
@@ -431,7 +603,7 @@ if (!token) {
       const civName = u.civilization && data.civilizations[u.civilization] ? data.civilizations[u.civilization].name : 'None';
       const relName = u.religion && data.religions[u.religion] ? data.religions[u.religion].name : 'None';
       const teamName = u.team && data.teams[u.team] ? data.teams[u.team].name : 'None';
-      const cultName = u.cult && data.cults[u.cult] ? '🌑 In a Cult' : 'None';
+      const cultName = u.cult && data.cults[u.cult] ? `🌑 ${data.cults[u.cult].name}` : 'None';
       reply(
         `**${message.author.username}'s Profile** ${u.isRebel ? '⚔️ REBEL' : ''}\n` +
         `Level: ${u.level} | XP: ${u.xp}/${u.nextLevelXp} | Rep: ${u.reputation}\n` +
@@ -439,8 +611,8 @@ if (!token) {
         `🏛️ Civilization: ${civName}\n` +
         `✝️ Religion: ${relName}\n` +
         `🛡️ Team: ${teamName}\n` +
-        `🌑 Cult: ${cultName}\n` +
-        (titles.length ? `🏅 Titles: ${titles.map(t => t.title).join(', ')}` : '')
+        `🌑 Cult: ${cultName}` +
+        (titles.length ? `\n🏅 Titles: ${titles.map(t => t.title).join(', ')}` : '')
       );
     }
 
@@ -473,28 +645,48 @@ if (!token) {
       if (!features.civilizationsEnabled) return reply('❌ Civilizations are disabled.');
       const name = args.join(' ');
       if (!name) return reply('Usage: !createciv <name>');
-      const r = await post('/api/civilizations/create', { name, leaderId: message.author.id, serverId: message.guild?.id });
-      reply(r.success ? `✅ Civilization **${name}** created! (ID: ${r.civilizationId})` : `❌ ${r.message}`);
+      const r = await post('/api/civilizations/create', { name, leaderId: message.author.id, serverId: guild?.id });
+      if (!r.success) return reply(`❌ ${r.message}`);
+
+      // Auto-create Discord role + private channels
+      if (guild) {
+        reply(`✅ Civilization **${name}** created! (ID: ${r.civilizationId}) — Setting up Discord channels…`);
+        const discord = await setupDiscordGroup(guild, 'civilization', name, message.author.id);
+        if (discord) {
+          Object.assign(data.civilizations[r.civilizationId], discord);
+          const ch = guild.channels.cache.get(discord.channelId);
+          if (ch) ch.send(`🏛️ Welcome to **${name}**! This is your civilization's private channel.\nRole: <@&${discord.roleId}> | Leader: <@${message.author.id}>`);
+        }
+      } else {
+        reply(`✅ Civilization **${name}** created! (ID: ${r.civilizationId})`);
+      }
     }
     else if (cmd === 'joinciv') {
       const id = args[0];
       if (!id) return reply('Usage: !joinciv <id>');
       const r = await post(`/api/civilizations/${id}/join`, { userId: message.author.id });
-      if (r.error) reply(`❌ ${r.error}`);
-      else reply(`✅ Joined civilization **${r.civilization.name}**!`);
+      if (r.error) return reply(`❌ ${r.error}`);
+      if (guild && data.civilizations[id]?.roleId) await assignRole(guild, message.author.id, data.civilizations[id].roleId);
+      reply(`✅ Joined civilization **${r.civilization.name}**! You've been given the <@&${data.civilizations[id]?.roleId || ''}> role.`);
     }
     else if (cmd === 'civs') {
       const civs = await call('/api/civilizations');
       if (!civs.length) return reply('No civilizations yet.');
-      reply(`**🏛️ Civilizations:**\n${civs.map(c => `• **${c.name}** (ID: ${c.id}) — ${c.members.length} members`).join('\n')}`);
+      reply(`**🏛️ Civilizations:**\n${civs.map(c => `• **${c.name}** (ID: ${c.id}) — ${c.members.length} members${c.roleId ? ` | <@&${c.roleId}>` : ''}`).join('\n')}`);
     }
 
     // ── Rebels ──
     else if (cmd === 'rebel') {
+      const u = data.users[message.author.id];
+      const oldCivId = u?.civilization;
       const reason = args.join(' ');
       const r = await post('/api/rebels', { userId: message.author.id, reason });
-      if (r.error) reply(`❌ ${r.error}`);
-      else reply(`⚔️ You have rebelled! You are now a free agent.`);
+      if (r.error) return reply(`❌ ${r.error}`);
+      // Remove the civ role
+      if (guild && oldCivId && data.civilizations[oldCivId]?.roleId) {
+        await removeRole(guild, message.author.id, data.civilizations[oldCivId].roleId);
+      }
+      reply(`⚔️ You have rebelled and left your civilization! You are now a free agent.`);
     }
     else if (cmd === 'rebels') {
       const rebels = await call('/api/rebels');
@@ -509,15 +701,28 @@ if (!token) {
       const name = parts[0]?.trim();
       const doctrine = parts[1]?.trim() || '';
       if (!name) return reply('Usage: !foundreligion <name> | <doctrine>');
-      const r = await post('/api/religions/create', { name, doctrine, founderId: message.author.id, serverId: message.guild?.id });
-      reply(r.success ? `✝️ Religion **${name}** founded! (ID: ${r.religionId})` : `❌ ${r.message}`);
+      const r = await post('/api/religions/create', { name, doctrine, founderId: message.author.id, serverId: guild?.id });
+      if (!r.success) return reply(`❌ ${r.message}`);
+
+      if (guild) {
+        reply(`✝️ Religion **${name}** founded! (ID: ${r.religionId}) — Setting up Discord channels…`);
+        const discord = await setupDiscordGroup(guild, 'religion', name, message.author.id);
+        if (discord) {
+          Object.assign(data.religions[r.religionId], discord);
+          const ch = guild.channels.cache.get(discord.channelId);
+          if (ch) ch.send(`✝️ Welcome to **${name}**!\n${doctrine ? `*"${doctrine}"*\n` : ''}Role: <@&${discord.roleId}> | High Priest: <@${message.author.id}>`);
+        }
+      } else {
+        reply(`✝️ Religion **${name}** founded! (ID: ${r.religionId})`);
+      }
     }
     else if (cmd === 'joinreligion') {
       const id = args[0];
       if (!id) return reply('Usage: !joinreligion <id>');
       const r = await post(`/api/religions/${id}/join`, { userId: message.author.id });
-      if (r.error) reply(`❌ ${r.error}`);
-      else reply(`✝️ You have joined **${r.religion.name}**!`);
+      if (r.error) return reply(`❌ ${r.error}`);
+      if (guild && data.religions[id]?.roleId) await assignRole(guild, message.author.id, data.religions[id].roleId);
+      reply(`✝️ You have converted to **${r.religion.name}**!`);
     }
     else if (cmd === 'religions') {
       const rels = await call('/api/religions');
@@ -536,15 +741,28 @@ if (!token) {
       if (!features.teamsEnabled) return reply('❌ Teams are disabled.');
       const name = args.join(' ');
       if (!name) return reply('Usage: !createteam <name>');
-      const r = await post('/api/teams/create', { name, leaderId: message.author.id, serverId: message.guild?.id });
-      reply(r.success ? `🛡️ Team **${name}** created! (ID: ${r.teamId})` : `❌ ${r.message}`);
+      const r = await post('/api/teams/create', { name, leaderId: message.author.id, serverId: guild?.id });
+      if (!r.success) return reply(`❌ ${r.message}`);
+
+      if (guild) {
+        reply(`🛡️ Team **${name}** created! (ID: ${r.teamId}) — Setting up Discord channels…`);
+        const discord = await setupDiscordGroup(guild, 'team', name, message.author.id);
+        if (discord) {
+          Object.assign(data.teams[r.teamId], discord);
+          const ch = guild.channels.cache.get(discord.channelId);
+          if (ch) ch.send(`🛡️ Welcome to team **${name}**!\nRole: <@&${discord.roleId}> | Captain: <@${message.author.id}>`);
+        }
+      } else {
+        reply(`🛡️ Team **${name}** created! (ID: ${r.teamId})`);
+      }
     }
     else if (cmd === 'jointeam') {
       const id = args[0];
       if (!id) return reply('Usage: !jointeam <id>');
       const r = await post(`/api/teams/${id}/join`, { userId: message.author.id });
-      if (r.error) reply(`❌ ${r.error}`);
-      else reply(`🛡️ Joined team **${r.team.name}**!`);
+      if (r.error) return reply(`❌ ${r.error}`);
+      if (guild && data.teams[id]?.roleId) await assignRole(guild, message.author.id, data.teams[id].roleId);
+      reply(`🛡️ Joined team **${r.team.name}**!`);
     }
     else if (cmd === 'teams') {
       const teams = await call('/api/teams');
@@ -559,15 +777,34 @@ if (!token) {
       const name = parts[0]?.trim();
       const secretObjective = parts[1]?.trim() || 'World domination';
       if (!name) return reply('Usage: !foundcult <name> | <secret objective>');
-      const r = await post('/api/cults/create', { name, secretObjective, leaderId: message.author.id, serverId: message.guild?.id });
-      reply(r.success ? `🌑 Cult **${name}** founded! (ID: ${r.cultId}) — The secrets are known only to you.` : `❌ ${r.message}`);
+      const r = await post('/api/cults/create', { name, secretObjective, leaderId: message.author.id, serverId: guild?.id });
+      if (!r.success) return reply(`❌ ${r.message}`);
+
+      if (guild) {
+        // DM the leader so the cult creation is secret
+        try {
+          await message.author.send(`🌑 Your cult **${name}** has been founded. (ID: ${r.cultId})\nSecret Objective: *${secretObjective}*\nSetting up your private channels now…`);
+          await message.delete().catch(() => {});
+        } catch (_) {
+          reply(`🌑 Cult **${name}** founded secretly. (ID: ${r.cultId})`);
+        }
+        const discord = await setupDiscordGroup(guild, 'cult', name, message.author.id);
+        if (discord) {
+          Object.assign(data.cults[r.cultId], discord);
+          const leaderCh = guild.channels.cache.get(discord.leaderChannelId);
+          if (leaderCh) leaderCh.send(`🌑 **${name}** is established.\n*Secret Objective: ${secretObjective}*\nOnly you can see this channel. Use !promote to add officers.`);
+        }
+      } else {
+        reply(`🌑 Cult **${name}** founded! (ID: ${r.cultId})`);
+      }
     }
     else if (cmd === 'joincult') {
       const id = args[0];
       if (!id) return reply('Usage: !joincult <id>');
       const r = await post(`/api/cults/${id}/join`, { userId: message.author.id });
-      if (r.error) reply(`❌ ${r.error}`);
-      else reply(`🌑 You have been initiated into **${r.cult.name}**...`);
+      if (r.error) return reply(`❌ ${r.error}`);
+      if (guild && data.cults[id]?.roleId) await assignRole(guild, message.author.id, data.cults[id].roleId);
+      reply(`🌑 You have been initiated into **${r.cult.name}**...`);
     }
     else if (cmd === 'cults') {
       const cults = await call('/api/cults');
@@ -581,6 +818,30 @@ if (!token) {
       reply(`🕯️ The ritual is complete. Cult power: **${r.power}** | Rituals performed: **${r.rituals}**`);
     }
 
+    // ── Promote to leader/officer (grants leadership channel access) ──
+    else if (cmd === 'promote') {
+      const target = args[0];
+      if (!target) return reply('Usage: !promote @user');
+      const userId = target.replace(/[<@!>]/g, '');
+      const u = await call(`/api/users/${message.author.id}`);
+      // Find which group the caller leads
+      const groupTypes = ['civilization', 'religion', 'team', 'cult'];
+      const stores = { civilization: data.civilizations, religion: data.religions, team: data.teams, cult: data.cults };
+      let promoted = false;
+      for (const gt of groupTypes) {
+        const groupId = u[gt === 'civilization' ? 'civilization' : gt];
+        if (!groupId) continue;
+        const group = stores[gt]?.[groupId];
+        if (group && String(group.leaderId) === String(message.author.id)) {
+          if (guild) await grantLeaderAccess(guild, userId, gt, groupId);
+          reply(`✅ <@${userId}> has been promoted to officer in **${group.name}** and can now access the leadership channel.`);
+          promoted = true;
+          break;
+        }
+      }
+      if (!promoted) reply('❌ You are not the leader of any group.');
+    }
+
     // ── Wars & Alliances ──
     else if (cmd === 'war') {
       if (!features.warsEnabled) return reply('❌ Wars are disabled.');
@@ -588,18 +849,20 @@ if (!token) {
       if (!targetId) return reply('Usage: !war <civId>');
       const u = await call(`/api/users/${message.author.id}`);
       if (!u.civilization) return reply('❌ You need a civilization to declare war.');
-      const r = await post('/api/alliances', { type: 'war', party1: u.civilization, party2: targetId });
+      await post('/api/alliances', { type: 'war', party1: u.civilization, party2: targetId });
+      const civ1 = data.civilizations[u.civilization];
       const civ2 = data.civilizations[targetId];
-      reply(`⚔️ War declared between **Civ ${u.civilization}** and **${civ2?.name || `Civ ${targetId}`}**!`);
+      reply(`⚔️ **${civ1?.name || `Civ ${u.civilization}`}** has declared WAR on **${civ2?.name || `Civ ${targetId}`}**!`);
     }
     else if (cmd === 'ally') {
       const targetId = args[0];
       if (!targetId) return reply('Usage: !ally <civId>');
       const u = await call(`/api/users/${message.author.id}`);
       if (!u.civilization) return reply('❌ You need a civilization.');
-      const r = await post('/api/alliances', { type: 'alliance', party1: u.civilization, party2: targetId });
+      await post('/api/alliances', { type: 'alliance', party1: u.civilization, party2: targetId });
+      const civ1 = data.civilizations[u.civilization];
       const civ2 = data.civilizations[targetId];
-      reply(`🤝 Alliance formed between **Civ ${u.civilization}** and **${civ2?.name || `Civ ${targetId}`}**!`);
+      reply(`🤝 Alliance formed between **${civ1?.name || `Civ ${u.civilization}`}** and **${civ2?.name || `Civ ${targetId}`}**!`);
     }
 
     // ── Events ──
@@ -608,7 +871,7 @@ if (!token) {
       if (!id) return reply('Usage: !joinevent <id>');
       const r = await post(`/api/events/${id}/join`, { userId: message.author.id });
       if (r.error) reply(`❌ ${r.error}`);
-      else reply(`✅ Joined event **${r.event.name}**! ${r.event.participants.length} participants.`);
+      else reply(`✅ Joined event **${r.event.name}**! ${r.event.participants.length} participant(s).`);
     }
     else if (cmd === 'events') {
       const evs = await call('/api/events');
@@ -626,7 +889,8 @@ if (!token) {
         '`!createteam <n>` `!jointeam <id>` `!teams`\n' +
         '`!foundcult <n>|<objective>` `!joincult <id>` `!cults` `!ritual`\n' +
         '`!war <civId>` `!ally <civId>`\n' +
-        '`!joinevent <id>` `!events`'
+        '`!joinevent <id>` `!events`\n' +
+        '`!promote @user` — grant someone leader/officer access'
       );
     }
   });
