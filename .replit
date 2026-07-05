@@ -7,3 +7,32 @@ channel = "stable-22_11"
 [[ports]]
 localPort = 5000
 externalPort = 5000
+
+[userenv]
+
+[userenv.shared]
+REACT_APP_API_URL = "https://github.com/godsaten13578642-svg/discord-bot"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd frontend && npm start"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
