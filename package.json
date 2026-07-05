@@ -4,14 +4,18 @@
   "description": "Discord Civilization Bot & Website",
   "main": "index.js",
   "scripts": {
-    "setup": "npm install && cd backend && npm install && cd ../bot && npm install && cd ../frontend && npm install",
-    "dev": "concurrently \"cd backend && npm run dev\" \"cd bot && npm run dev\" \"cd frontend && npm start\"",
-    "install-all": "npm install && cd backend && npm install && cd ../bot && npm install && cd ../frontend && npm install"
+    "start": "concurrently \"node server.js\" \"cd frontend && npm start\"",
+    "setup": "npm install && cd frontend && npm install",
+    "dev": "concurrently \"node server.js\" \"cd frontend && npm start\""
   },
   "dependencies": {
     "ajv": "^8.20.0",
     "axios": "^1.18.1",
     "concurrently": "^7.6.0",
+    "cors": "^2.8.6",
+    "discord.js": "^14.26.4",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",

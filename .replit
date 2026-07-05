@@ -6,6 +6,10 @@ modules = ["nodejs-20"]
 channel = "stable-22_11"
 
 [[ports]]
+localPort = 3001
+externalPort = 80
+
+[[ports]]
 localPort = 5000
 externalPort = 5000
 
@@ -30,13 +34,13 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd frontend && npm start"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm start"
+waitForPort = 5000
 
 [agent]
 expertMode = true
