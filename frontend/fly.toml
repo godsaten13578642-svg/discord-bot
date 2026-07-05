@@ -1,0 +1,24 @@
+# Fly.io config - Frontend
+app = "civilization-bot-frontend"
+primary_region = "sjc"
+
+[build]
+  image = "civilization-bot-frontend:latest"
+
+[env]
+  PORT = "3000"
+  NODE_ENV = "production"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 3000
+  processes = ["app"]
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]

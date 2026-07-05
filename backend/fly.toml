@@ -1,0 +1,24 @@
+# Fly.io config - Backend
+app = "civilization-bot-backend"
+primary_region = "sjc"
+
+[build]
+  image = "civilization-bot-backend:latest"
+
+[env]
+  PORT = "5000"
+  NODE_ENV = "production"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 5000
+  processes = ["app"]
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
