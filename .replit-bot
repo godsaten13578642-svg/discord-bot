@@ -1,0 +1,12 @@
+# Replit config for Discord Bot
+run = "cd bot && npm start"
+entrypoint = "bot/src/index.js"
+
+[nix]
+channel = "stable-22_11"
+
+[env]
+DISCORD_BOT_TOKEN = ""
+DISCORD_CLIENT_ID = ""
+API_URL = "https://your-backend-replit-url.replit.dev"
+NODE_ENV = "production"
