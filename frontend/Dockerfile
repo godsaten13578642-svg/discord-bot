@@ -5,12 +5,13 @@ WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
-COPY src ./src
 COPY public ./public
+COPY src ./src
 
-# Build React app
+# Build React app with CI flag to avoid warnings as errors
+ENV CI=false
 RUN npm run build
 
 # Production stage
