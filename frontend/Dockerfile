@@ -1,4 +1,5 @@
 # Frontend Dockerfile - Simple Node server
+# Cache bust: 2026-07-05
 FROM node:18-alpine AS builder
 
 WORKDIR /app
