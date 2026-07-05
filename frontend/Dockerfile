@@ -1,44 +1,48 @@
-# Frontend Dockerfile
+# Frontend Dockerfile - Simple Node server
 FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
 COPY package.json ./
 
-# Install dependencies
-RUN npm install --legacy-peer-deps --no-audit --no-fund 2>&1 || npm install --legacy-peer-deps
+RUN npm install --legacy-peer-deps --no-audit --no-fund
 
-# Copy source
 COPY public ./public
 COPY src ./src
 
-# Build with environment variables
 ENV CI=false
 ENV SKIP_PREFLIGHT_CHECK=true
 ENV NODE_ENV=production
 
 RUN npm run build
 
-# Check if build succeeded
-RUN test -d /app/build || (echo "Build failed!" && exit 1)
-
-# Production stage
+# Production stage - use Node directly
 FROM node:18-alpine
 
 WORKDIR /app
 
-# Install serve
-RUN npm install -g serve
+COPY --from=builder /app/build ./public
 
-# Copy built app from builder
-COPY --from=builder /app/build ./build
+# Simple Express server to serve static files
+RUN cat > server.js << 'EOF'
+const express = require('express');
+const path = require('path');
+const app = express();
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Frontend running on port ${PORT}`);
+});
+EOF
+
+RUN npm install express
 
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost:3000 || exit 1
-
-# Start serve
-CMD ["serve", "-s", "build", "-l", "3000"]
+CMD ["node", "server.js"]
