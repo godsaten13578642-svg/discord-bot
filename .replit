@@ -12,7 +12,7 @@ externalPort = 5000
 [userenv]
 
 [userenv.shared]
-REACT_APP_API_URL = "https://github.com/godsaten13578642-svg/discord-bot"
+REACT_APP_API_URL = "https://discord-bot--godsaten1357864.replit.app"
 
 [workflows]
 runButton = "Project"
@@ -40,3 +40,6 @@ outputType = "webview"
 
 [agent]
 expertMode = true
+
+[deployment]
+deploymentTarget = "cloudrun"
