@@ -38,5 +38,4 @@ services:
 databases:
   - name: civilization-db
     databaseName: civilization_bot
-    user: postgres
     plan: free
