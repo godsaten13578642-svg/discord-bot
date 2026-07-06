@@ -194,12 +194,54 @@ app.post('/api/civilizations/:id/join', (req, res) => {
   const u = ensureUser(userId); u.civilization = req.params.id; u.isRebel = false;
   res.json({ success: true, civilization: civ });
 });
+app.post('/api/civilizations/:id/leave', (req, res) => {
+  const { userId } = req.body;
+  const civ = data.civilizations[req.params.id];
+  if (!civ) return res.status(404).json({ error: 'Not found' });
+  civ.members = civ.members.filter(m => m !== userId);
+  if (data.users[userId]) { data.users[userId].civilization = null; if (data.users[userId].rank === 'Leader') data.users[userId].rank = 'Member'; }
+  res.json({ success: true, civ });
+});
+app.post('/api/civilizations/:id/kick', (req, res) => {
+  const { leaderId, userId } = req.body;
+  const civ = data.civilizations[req.params.id];
+  if (!civ) return res.status(404).json({ error: 'Not found' });
+  if (String(civ.leaderId) !== String(leaderId)) return res.status(403).json({ error: 'Not the leader' });
+  civ.members = civ.members.filter(m => m !== userId);
+  if (data.users[userId]) data.users[userId].civilization = null;
+  res.json({ success: true });
+});
+app.post('/api/civilizations/:id/treasury/deposit', (req, res) => {
+  const { userId, amount } = req.body;
+  const civ = data.civilizations[req.params.id];
+  if (!civ) return res.status(404).json({ error: 'Not found' });
+  const amt = Number(amount);
+  if (!amt || amt <= 0) return res.status(400).json({ error: 'Invalid amount' });
+  ensureBalance(userId);
+  if (data.economy[userId] < amt) return res.status(400).json({ error: 'Insufficient funds' });
+  data.economy[userId] -= amt;
+  civ.treasury = (civ.treasury || 0) + amt;
+  res.json({ success: true, treasury: civ.treasury, balance: data.economy[userId] });
+});
+app.post('/api/civilizations/:id/treasury/withdraw', (req, res) => {
+  const { leaderId, amount } = req.body;
+  const civ = data.civilizations[req.params.id];
+  if (!civ) return res.status(404).json({ error: 'Not found' });
+  if (String(civ.leaderId) !== String(leaderId)) return res.status(403).json({ error: 'Not the leader' });
+  const amt = Number(amount);
+  if (!amt || amt <= 0) return res.status(400).json({ error: 'Invalid amount' });
+  if ((civ.treasury || 0) < amt) return res.status(400).json({ error: 'Insufficient treasury funds' });
+  civ.treasury -= amt;
+  ensureBalance(leaderId);
+  data.economy[leaderId] += amt;
+  res.json({ success: true, treasury: civ.treasury, balance: data.economy[leaderId] });
+});
 app.delete('/api/civilizations/:id', (req, res) => {
   const civ = data.civilizations[req.params.id];
   if (!civ) return res.status(404).json({ error: 'Not found' });
   civ.members.forEach(uid => { if (data.users[uid]) data.users[uid].civilization = null; });
   delete data.civilizations[req.params.id];
-  res.json({ success: true });
+  res.json({ success: true, discord: { roleId: civ.roleId, categoryId: civ.categoryId, channelId: civ.channelId, leaderChannelId: civ.leaderChannelId } });
 });
 
 // ── Rebels ─────────────────────────────────────────────────────────────────────
@@ -240,12 +282,29 @@ app.post('/api/religions/:id/join', (req, res) => {
   const u = ensureUser(userId); u.religion = req.params.id;
   res.json({ success: true, religion: rel });
 });
+app.post('/api/religions/:id/leave', (req, res) => {
+  const { userId } = req.body;
+  const rel = data.religions[req.params.id];
+  if (!rel) return res.status(404).json({ error: 'Not found' });
+  rel.members = rel.members.filter(m => m !== userId);
+  if (data.users[userId]) data.users[userId].religion = null;
+  res.json({ success: true });
+});
+app.post('/api/religions/:id/kick', (req, res) => {
+  const { leaderId, userId } = req.body;
+  const rel = data.religions[req.params.id];
+  if (!rel) return res.status(404).json({ error: 'Not found' });
+  if (String(rel.founderId) !== String(leaderId)) return res.status(403).json({ error: 'Not the founder' });
+  rel.members = rel.members.filter(m => m !== userId);
+  if (data.users[userId]) data.users[userId].religion = null;
+  res.json({ success: true });
+});
 app.delete('/api/religions/:id', (req, res) => {
   const rel = data.religions[req.params.id];
   if (!rel) return res.status(404).json({ error: 'Not found' });
   rel.members.forEach(uid => { if (data.users[uid]) data.users[uid].religion = null; });
   delete data.religions[req.params.id];
-  res.json({ success: true });
+  res.json({ success: true, discord: { roleId: rel.roleId, categoryId: rel.categoryId, channelId: rel.channelId, leaderChannelId: rel.leaderChannelId } });
 });
 app.post('/api/religions/:id/bless', (req, res) => {
   const rel = data.religions[req.params.id];
@@ -277,12 +336,29 @@ app.post('/api/teams/:id/points', (req, res) => {
   team.points += Number(req.body.amount) || 0;
   res.json({ success: true, points: team.points });
 });
+app.post('/api/teams/:id/leave', (req, res) => {
+  const { userId } = req.body;
+  const team = data.teams[req.params.id];
+  if (!team) return res.status(404).json({ error: 'Not found' });
+  team.members = team.members.filter(m => m !== userId);
+  if (data.users[userId]) data.users[userId].team = null;
+  res.json({ success: true });
+});
+app.post('/api/teams/:id/kick', (req, res) => {
+  const { leaderId, userId } = req.body;
+  const team = data.teams[req.params.id];
+  if (!team) return res.status(404).json({ error: 'Not found' });
+  if (String(team.leaderId) !== String(leaderId)) return res.status(403).json({ error: 'Not the leader' });
+  team.members = team.members.filter(m => m !== userId);
+  if (data.users[userId]) data.users[userId].team = null;
+  res.json({ success: true });
+});
 app.delete('/api/teams/:id', (req, res) => {
   const team = data.teams[req.params.id];
   if (!team) return res.status(404).json({ error: 'Not found' });
   team.members.forEach(uid => { if (data.users[uid]) data.users[uid].team = null; });
   delete data.teams[req.params.id];
-  res.json({ success: true });
+  res.json({ success: true, discord: { roleId: team.roleId, categoryId: team.categoryId, channelId: team.channelId, leaderChannelId: team.leaderChannelId } });
 });
 
 // ── Cults ──────────────────────────────────────────────────────────────────────
@@ -309,12 +385,29 @@ app.post('/api/cults/:id/ritual', (req, res) => {
   cult.rituals++; cult.power += 10;
   res.json({ success: true, rituals: cult.rituals, power: cult.power });
 });
+app.post('/api/cults/:id/leave', (req, res) => {
+  const { userId } = req.body;
+  const cult = data.cults[req.params.id];
+  if (!cult) return res.status(404).json({ error: 'Not found' });
+  cult.members = cult.members.filter(m => m !== userId);
+  if (data.users[userId]) data.users[userId].cult = null;
+  res.json({ success: true });
+});
+app.post('/api/cults/:id/kick', (req, res) => {
+  const { leaderId, userId } = req.body;
+  const cult = data.cults[req.params.id];
+  if (!cult) return res.status(404).json({ error: 'Not found' });
+  if (String(cult.leaderId) !== String(leaderId)) return res.status(403).json({ error: 'Not the leader' });
+  cult.members = cult.members.filter(m => m !== userId);
+  if (data.users[userId]) data.users[userId].cult = null;
+  res.json({ success: true });
+});
 app.delete('/api/cults/:id', (req, res) => {
   const cult = data.cults[req.params.id];
   if (!cult) return res.status(404).json({ error: 'Not found' });
   cult.members.forEach(uid => { if (data.users[uid]) data.users[uid].cult = null; });
   delete data.cults[req.params.id];
-  res.json({ success: true });
+  res.json({ success: true, discord: { roleId: cult.roleId, categoryId: cult.categoryId, channelId: cult.channelId, leaderChannelId: cult.leaderChannelId } });
 });
 
 // ── Alliances & Wars ───────────────────────────────────────────────────────────
@@ -548,6 +641,17 @@ if (!token) {
     } catch (err) {
       console.error('removeRole error:', err.message);
     }
+  }
+
+  // Tear down Discord role + channels + category when a group is disbanded
+  async function teardownDiscordGroup(guild, discord) {
+    if (!guild || !discord) return;
+    const { roleId, channelId, leaderChannelId, categoryId } = discord;
+    const safe = (fn) => fn().catch(() => {});
+    if (channelId) safe(() => guild.channels.cache.get(channelId)?.delete('Group disbanded'));
+    if (leaderChannelId) safe(() => guild.channels.cache.get(leaderChannelId)?.delete('Group disbanded'));
+    if (categoryId) safe(() => guild.channels.cache.get(categoryId)?.delete('Group disbanded'));
+    if (roleId) safe(() => guild.roles.cache.get(roleId)?.delete('Group disbanded'));
   }
 
   // Grant a user access to the leadership channel
@@ -818,6 +922,147 @@ if (!token) {
       reply(`🕯️ The ritual is complete. Cult power: **${r.power}** | Rituals performed: **${r.rituals}**`);
     }
 
+    // ── Leave commands ──
+    else if (cmd === 'leaveciv') {
+      const u = data.users[message.author.id];
+      const civId = u?.civilization;
+      if (!civId) return reply('❌ You are not in a civilization.');
+      const civ = data.civilizations[civId];
+      if (String(civ?.leaderId) === String(message.author.id)) return reply('❌ Leaders cannot leave — use `!disband` to dissolve your civilization.');
+      await post(`/api/civilizations/${civId}/leave`, { userId: message.author.id });
+      if (guild && civ?.roleId) await removeRole(guild, message.author.id, civ.roleId);
+      reply(`✅ You have left **${civ?.name || 'your civilization'}**.`);
+    }
+    else if (cmd === 'leavereligion') {
+      const u = data.users[message.author.id];
+      const relId = u?.religion;
+      if (!relId) return reply('❌ You have no religion.');
+      const rel = data.religions[relId];
+      await post(`/api/religions/${relId}/leave`, { userId: message.author.id });
+      if (guild && rel?.roleId) await removeRole(guild, message.author.id, rel.roleId);
+      reply(`✝️ You have renounced **${rel?.name || 'your religion'}**.`);
+    }
+    else if (cmd === 'leaveteam') {
+      const u = data.users[message.author.id];
+      const teamId = u?.team;
+      if (!teamId) return reply('❌ You are not on a team.');
+      const team = data.teams[teamId];
+      if (String(team?.leaderId) === String(message.author.id)) return reply('❌ Captains cannot leave — use `!disband` to dissolve your team.');
+      await post(`/api/teams/${teamId}/leave`, { userId: message.author.id });
+      if (guild && team?.roleId) await removeRole(guild, message.author.id, team.roleId);
+      reply(`🛡️ You have left team **${team?.name || 'your team'}**.`);
+    }
+    else if (cmd === 'leavecult') {
+      const u = data.users[message.author.id];
+      const cultId = u?.cult;
+      if (!cultId) return reply('❌ You are not in a cult.');
+      const cult = data.cults[cultId];
+      if (String(cult?.leaderId) === String(message.author.id)) return reply('❌ The leader cannot abandon the cult — use `!disband` to dissolve it.');
+      await post(`/api/cults/${cultId}/leave`, { userId: message.author.id });
+      if (guild && cult?.roleId) await removeRole(guild, message.author.id, cult.roleId);
+      reply(`🌑 You have defected from **${cult?.name || 'the cult'}**. They will not forget.`);
+    }
+
+    // ── Kick ──
+    else if (cmd === 'kick') {
+      const target = args[0];
+      if (!target) return reply('Usage: !kick @user');
+      const targetId = target.replace(/[<@!>]/g, '');
+      const u = data.users[message.author.id];
+      const stores = { civilization: data.civilizations, religion: data.religions, team: data.teams, cult: data.cults };
+      const leaderKeys = { civilization: 'leaderId', religion: 'founderId', team: 'leaderId', cult: 'leaderId' };
+      const apiKeys = { civilization: 'civilizations', religion: 'religions', team: 'teams', cult: 'cults' };
+      let kicked = false;
+      for (const gt of Object.keys(stores)) {
+        const groupId = u?.[gt === 'civilization' ? 'civilization' : gt];
+        if (!groupId) continue;
+        const group = stores[gt]?.[groupId];
+        if (group && String(group[leaderKeys[gt]]) === String(message.author.id)) {
+          if (!group.members.includes(targetId)) { reply(`❌ <@${targetId}> is not in your group.`); kicked = true; break; }
+          await post(`/api/${apiKeys[gt]}/${groupId}/kick`, { leaderId: message.author.id, userId: targetId });
+          if (guild && group.roleId) await removeRole(guild, targetId, group.roleId);
+          reply(`✅ <@${targetId}> has been kicked from **${group.name}**.`);
+          kicked = true;
+          break;
+        }
+      }
+      if (!kicked) reply('❌ You are not the leader of any group.');
+    }
+
+    // ── Disband ──
+    else if (cmd === 'disband') {
+      const u = data.users[message.author.id];
+      const stores = { civilization: data.civilizations, religion: data.religions, team: data.teams, cult: data.cults };
+      const apiRoutes = { civilization: 'civilizations', religion: 'religions', team: 'teams', cult: 'cults' };
+      const leaderKeys = { civilization: 'leaderId', religion: 'founderId', team: 'leaderId', cult: 'leaderId' };
+      let disbanded = false;
+      for (const gt of Object.keys(stores)) {
+        const groupId = u?.[gt === 'civilization' ? 'civilization' : gt];
+        if (!groupId) continue;
+        const group = stores[gt]?.[groupId];
+        if (group && String(group[leaderKeys[gt]]) === String(message.author.id)) {
+          const discordMeta = { roleId: group.roleId, categoryId: group.categoryId, channelId: group.channelId, leaderChannelId: group.leaderChannelId };
+          await fetch(`http://localhost:${API_PORT}/api/${apiRoutes[gt]}/${groupId}`, { method: 'DELETE' });
+          if (guild) await teardownDiscordGroup(guild, discordMeta);
+          reply(`💥 **${group.name}** has been disbanded. All members have lost access.`);
+          disbanded = true;
+          break;
+        }
+      }
+      if (!disbanded) reply('❌ You are not the leader of any group.');
+    }
+
+    // ── Award Title ──
+    else if (cmd === 'title') {
+      const target = args[0];
+      const titleText = args.slice(1).join(' ');
+      if (!target || !titleText) return reply('Usage: !title @user <title text>');
+      const targetId = target.replace(/[<@!>]/g, '');
+      // Any leader can award titles to their members
+      const u = data.users[message.author.id];
+      const stores = { civilization: data.civilizations, religion: data.religions, team: data.teams, cult: data.cults };
+      const leaderKeys = { civilization: 'leaderId', religion: 'founderId', team: 'leaderId', cult: 'leaderId' };
+      let awarded = false;
+      for (const gt of Object.keys(stores)) {
+        const groupId = u?.[gt === 'civilization' ? 'civilization' : gt];
+        if (!groupId) continue;
+        const group = stores[gt]?.[groupId];
+        if (group && String(group[leaderKeys[gt]]) === String(message.author.id)) {
+          await post(`/api/users/${targetId}/title`, { title: titleText, awardedBy: message.author.id });
+          reply(`🏅 <@${targetId}> has been awarded the title **"${titleText}"** by <@${message.author.id}>!`);
+          awarded = true;
+          break;
+        }
+      }
+      if (!awarded) reply('❌ Only group leaders can award titles.');
+    }
+
+    // ── Treasury ──
+    else if (cmd === 'treasury') {
+      const u = data.users[message.author.id];
+      if (!u?.civilization) return reply('❌ You need to be in a civilization to use the treasury.');
+      const civ = data.civilizations[u.civilization];
+      reply(`🏛️ **${civ.name}** Treasury: **${civ.treasury || 0} gold**\n${civ.members.length} members | Leader: <@${civ.leaderId}>`);
+    }
+    else if (cmd === 'deposit') {
+      const amt = Number(args[0]);
+      if (!amt || amt <= 0) return reply('Usage: !deposit <amount>');
+      const u = data.users[message.author.id];
+      if (!u?.civilization) return reply('❌ You are not in a civilization.');
+      const r = await post(`/api/civilizations/${u.civilization}/treasury/deposit`, { userId: message.author.id, amount: amt });
+      if (r.error) reply(`❌ ${r.error}`);
+      else reply(`💰 Deposited **${amt} gold** to the treasury. Treasury: **${r.treasury} gold** | Your balance: **${r.balance} gold**`);
+    }
+    else if (cmd === 'withdraw') {
+      const amt = Number(args[0]);
+      if (!amt || amt <= 0) return reply('Usage: !withdraw <amount>');
+      const u = data.users[message.author.id];
+      if (!u?.civilization) return reply('❌ You are not in a civilization.');
+      const r = await post(`/api/civilizations/${u.civilization}/treasury/withdraw`, { leaderId: message.author.id, amount: amt });
+      if (r.error) reply(`❌ ${r.error}`);
+      else reply(`💰 Withdrew **${amt} gold** from the treasury. Treasury: **${r.treasury} gold** | Your balance: **${r.balance} gold**`);
+    }
+
     // ── Promote to leader/officer (grants leadership channel access) ──
     else if (cmd === 'promote') {
       const target = args[0];
@@ -882,15 +1127,15 @@ if (!token) {
     else if (cmd === 'help') {
       reply(
         '**📜 Commands:**\n' +
-        '`!profile` `!balance` `!daily` `!pay @user <amt>` `!leaderboard`\n' +
-        '`!createciv <n>` `!joinciv <id>` `!civs`\n' +
-        '`!rebel [reason]` `!rebels`\n' +
-        '`!foundreligion <n>|<doctrine>` `!joinreligion <id>` `!religions` `!pray`\n' +
-        '`!createteam <n>` `!jointeam <id>` `!teams`\n' +
-        '`!foundcult <n>|<objective>` `!joincult <id>` `!cults` `!ritual`\n' +
-        '`!war <civId>` `!ally <civId>`\n' +
-        '`!joinevent <id>` `!events`\n' +
-        '`!promote @user` — grant someone leader/officer access'
+        '**Economy:** `!profile` `!balance` `!daily` `!pay @user <amt>` `!leaderboard`\n' +
+        '**Treasury:** `!treasury` `!deposit <amt>` `!withdraw <amt>` *(leaders only)*\n' +
+        '**Civs:** `!createciv <n>` `!joinciv <id>` `!leaveciv` `!civs` `!rebel [reason]` `!rebels`\n' +
+        '**Religion:** `!foundreligion <n>|<doctrine>` `!joinreligion <id>` `!leavereligion` `!religions` `!pray`\n' +
+        '**Teams:** `!createteam <n>` `!jointeam <id>` `!leaveteam` `!teams`\n' +
+        '**Cults:** `!foundcult <n>|<obj>` `!joincult <id>` `!leavecult` `!cults` `!ritual`\n' +
+        '**Diplomacy:** `!war <civId>` `!ally <civId>`\n' +
+        '**Events:** `!joinevent <id>` `!events`\n' +
+        '**Leader only:** `!promote @user` `!kick @user` `!disband` `!title @user <title>`'
       );
     }
   });
