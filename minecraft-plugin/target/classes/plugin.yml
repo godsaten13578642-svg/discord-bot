@@ -1,0 +1,31 @@
+name: CivBridge
+version: '1.0.0'
+main: com.civbot.CivBridgePlugin
+api-version: '1.21'
+description: Minecraft ↔ Discord bridge for Civilization Bot
+authors: [CivBot]
+website: ''
+
+commands:
+  link:
+    description: Link your Minecraft account to Discord
+    usage: /link
+    aliases: [discordlink]
+  unlink:
+    description: Unlink your Minecraft account from Discord
+    usage: /unlink
+  discord:
+    description: Show Discord server info
+    usage: /discord
+  civ:
+    description: View your civilization info
+    usage: /civ [player]
+  civreload:
+    description: Reload CivBridge config
+    usage: /civreload
+    permission: civbridge.admin
+
+permissions:
+  civbridge.admin:
+    description: Access to admin commands
+    default: op
