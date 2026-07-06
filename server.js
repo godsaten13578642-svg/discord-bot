@@ -20,6 +20,11 @@ const data = {
   titles: {},        // userId -> [{ title, awardedBy, createdAt }]
   events: {},        // id -> { id, name, type, participants[], status, createdAt }
   blackmarket: [],   // anonymous trades
+  // ── Minecraft bridge ──
+  linkedAccounts: {},  // minecraftUUID -> discordId
+  reverseLinks: {},    // discordId -> minecraftUUID
+  linkCodes: {},       // code -> { minecraftUUID, username, expiresAt }
+  mcServer: { players: [], online: false, lastSeen: null },
 };
 
 let counters = { civ: 1, religion: 1, team: 1, cult: 1, alliance: 1, event: 1 };
@@ -39,6 +44,9 @@ const features = {
   eventsEnabled: true,
   dailyRewardAmount: 100,
   xpPerMessage: 10,
+  // ── Minecraft bridge ──
+  bridgeChannelId: '',   // Discord channel ID for MC↔Discord chat
+  mcApiKey: 'change-me-to-something-secret',
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -469,8 +477,146 @@ app.delete('/api/servers/:id', (req, res) => {
   res.json({ success: true });
 });
 
+// ── Minecraft Bridge API ───────────────────────────────────────────────────────
+
+const mcAuth = (req, res, next) => {
+  const key = req.headers['x-api-key'] || req.body?.apiKey;
+  if (key !== features.mcApiKey) return res.status(403).json({ error: 'Invalid API key' });
+  next();
+};
+
+// MC → Discord chat relay
+app.post('/api/mc/chat', mcAuth, (req, res) => {
+  const { playerName, content, mcPrefix = '[MC]' } = req.body;
+  data.mcServer.online = true;
+  data.mcServer.lastSeen = new Date();
+  if (features.bridgeChannelId && global.botClient) {
+    const ch = global.botClient.channels.cache.get(features.bridgeChannelId);
+    if (ch) ch.send(`**${mcPrefix} ${playerName}:** ${content}`).catch(() => {});
+  }
+  res.json({ success: true });
+});
+
+// MC event relay (join, quit, death, advancement, server_start, server_stop)
+app.post('/api/mc/event', mcAuth, (req, res) => {
+  const { type, playerName, message } = req.body;
+  data.mcServer.online = (type !== 'server_stop');
+  data.mcServer.lastSeen = new Date();
+
+  if (features.bridgeChannelId && global.botClient) {
+    const ch = global.botClient.channels.cache.get(features.bridgeChannelId);
+    if (ch && message) ch.send(message).catch(() => {});
+  }
+  res.json({ success: true });
+});
+
+// MC plugin updates player list
+app.post('/api/mc/players', mcAuth, (req, res) => {
+  const { players } = req.body;
+  data.mcServer.players = Array.isArray(players) ? players : [];
+  data.mcServer.online = true;
+  data.mcServer.lastSeen = new Date();
+  // Broadcast updated count to all WS clients
+  if (global.mcWsClients) {
+    const msg = JSON.stringify({ type: 'player_update', players: data.mcServer.players });
+    global.mcWsClients.forEach(ws => { if (ws.readyState === 1) ws.send(msg); });
+  }
+  res.json({ success: true, count: data.mcServer.players.length });
+});
+
+// Generate a link code (called by plugin when player types /link)
+app.post('/api/mc/link/generate', mcAuth, (req, res) => {
+  const { minecraftUUID, username } = req.body;
+  if (!minecraftUUID || !username) return res.status(400).json({ error: 'Missing fields' });
+  const code = String(Math.floor(Math.random() * 1_000_000)).padStart(6, '0');
+  data.linkCodes[code] = { minecraftUUID, username, expiresAt: Date.now() + 5 * 60 * 1000 };
+  res.json({ success: true, code });
+});
+
+// Confirm link from Discord side (code + discordId)
+app.post('/api/mc/link/confirm', (req, res) => {
+  const { code, discordId } = req.body;
+  const entry = data.linkCodes[code];
+  if (!entry) return res.status(404).json({ error: 'Code not found or expired' });
+  if (Date.now() > entry.expiresAt) {
+    delete data.linkCodes[code];
+    return res.status(400).json({ error: 'Code expired' });
+  }
+  const { minecraftUUID, username } = entry;
+  delete data.linkCodes[code];
+  data.linkedAccounts[minecraftUUID] = discordId;
+  data.reverseLinks[discordId] = minecraftUUID;
+  // Push link_confirm to connected WS clients so plugin can notify in-game player
+  if (global.mcWsClients) {
+    const msg = JSON.stringify({ type: 'link_confirm', code, discordId, minecraftUUID });
+    global.mcWsClients.forEach(ws => { if (ws.readyState === 1) ws.send(msg); });
+  }
+  res.json({ success: true, minecraftUUID, username });
+});
+
+// Profile endpoint — MC plugin fetches linked user's bot profile
+app.get('/api/mc/profile/:discordId', mcAuth, (req, res) => {
+  const discordId = req.params.discordId;
+  const u = data.users[discordId];
+  if (!u) return res.json({ discordId, level: 1, balance: 0 });
+  const civ  = u.civilization ? data.civilizations[u.civilization]?.name  : null;
+  const rel  = u.religion     ? data.religions[u.religion]?.name         : null;
+  const team = u.team         ? data.teams[u.team]?.name                 : null;
+  res.json({
+    discordId, level: u.level, xp: u.xp, balance: data.economy[discordId] || 0,
+    civilization: civ, religion: rel, team,
+    isRebel: u.isRebel, rank: u.rank,
+  });
+});
+
+// Dashboard: get MC server status
+app.get('/api/mc/status', (_, res) => res.json(data.mcServer));
+app.get('/api/mc/linked', (_, res) => res.json(data.linkedAccounts));
+
 const API_PORT = process.env.API_PORT || 3001;
 app.listen(API_PORT, '0.0.0.0', () => console.log(`✅ API server running on port ${API_PORT}`));
+
+// ── WebSocket Server (MC ↔ Bot real-time bridge) ──────────────────────────────
+const WS_PORT = process.env.WS_PORT || 3002;
+const { WebSocketServer } = require('ws');
+const wss = new WebSocketServer({ port: WS_PORT });
+global.mcWsClients = new Set();
+
+wss.on('connection', (ws, req) => {
+  const apiKey = req.headers['x-api-key'];
+  if (apiKey !== features.mcApiKey) { ws.close(1008, 'Unauthorized'); return; }
+
+  global.mcWsClients.add(ws);
+  console.log(`🔌 MC plugin connected via WebSocket (${global.mcWsClients.size} clients)`);
+
+  ws.on('message', (raw) => {
+    try {
+      const msg = JSON.parse(raw.toString());
+
+      if (msg.type === 'pong') {
+        data.mcServer.online = true;
+        data.mcServer.lastSeen = new Date();
+        if (msg.playerCount !== undefined) data.mcServer.playerCount = msg.playerCount;
+        return;
+      }
+
+      // Relay MC chat to Discord bridge channel
+      if (msg.type === 'mc_chat' && features.bridgeChannelId && global.botClient) {
+        const ch = global.botClient.channels.cache.get(features.bridgeChannelId);
+        if (ch) ch.send(`**[MC] ${msg.player}:** ${msg.content}`).catch(() => {});
+      }
+    } catch (_) {}
+  });
+
+  ws.on('close', () => {
+    global.mcWsClients.delete(ws);
+    console.log(`🔌 MC plugin disconnected (${global.mcWsClients.size} clients)`);
+  });
+
+  ws.on('error', () => global.mcWsClients.delete(ws));
+});
+
+console.log(`✅ WebSocket server running on port ${WS_PORT}`);
 
 // ── Discord Bot ────────────────────────────────────────────────────────────────
 const token = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;
@@ -686,6 +832,19 @@ if (!token) {
 
   client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
+
+    // ── Bridge channel relay (Discord → Minecraft) ──
+    if (features.bridgeChannelId && message.channel.id === features.bridgeChannelId) {
+      if (global.mcWsClients && global.mcWsClients.size > 0) {
+        const payload = JSON.stringify({
+          type: 'discord_chat',
+          author: message.author.username,
+          content: message.content,
+        });
+        global.mcWsClients.forEach(ws => { if (ws.readyState === 1) ws.send(payload); });
+      }
+    }
+
     if (!features.commandsEnabled) return;
 
     const prefix = '!';
@@ -1124,6 +1283,52 @@ if (!token) {
       reply(`**📅 Events:**\n${evs.map(e => `• **${e.name}** (ID: ${e.id}) [${e.status}] — ${e.participants.length} joined | 💰 ${e.reward} reward`).join('\n')}`);
     }
 
+    // ── Minecraft Bridge Commands ──
+    else if (cmd === 'link') {
+      const code = args[0];
+      if (!code) return reply('Usage: `!link <code>` — get your code in Minecraft with `/link`');
+      if (!/^\d{6}$/.test(code)) return reply('❌ Code must be a 6-digit number. Get it in Minecraft with `/link`.');
+
+      const res = await fetch(`http://localhost:${API_PORT}/api/mc/link/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, discordId: message.author.id }),
+      }).then(r => r.json()).catch(() => ({ error: 'Server error' }));
+
+      if (res.error) reply(`❌ ${res.error}`);
+      else reply(`✅ Your Discord account is now linked to Minecraft player **${res.username}**! 🎮`);
+    }
+    else if (cmd === 'unlink') {
+      const mcUUID = data.reverseLinks[message.author.id];
+      if (!mcUUID) return reply('❌ Your Discord account is not linked to any Minecraft account.');
+      delete data.linkedAccounts[mcUUID];
+      delete data.reverseLinks[message.author.id];
+      reply('✅ Your Minecraft account has been unlinked.');
+    }
+    else if (cmd === 'mcplayers') {
+      const mc = data.mcServer;
+      if (!mc.online) return reply('🔴 Minecraft server appears to be **offline**.');
+      if (!mc.players.length) return reply('🟢 Minecraft server is **online** — no players currently.');
+      reply(`🟢 **Minecraft Server** — ${mc.players.length} player(s) online:\n${mc.players.map(p => `• \`${p}\``).join('\n')}`);
+    }
+    else if (cmd === 'mcping') {
+      const mc = data.mcServer;
+      const lastSeen = mc.lastSeen ? `Last seen: <t:${Math.floor(new Date(mc.lastSeen).getTime() / 1000)}:R>` : 'Never connected';
+      reply(`${mc.online ? '🟢 **Online**' : '🔴 **Offline**'} — ${mc.players.length} player(s) | ${lastSeen}`);
+    }
+    else if (cmd === 'mcciv') {
+      const target = args[0];
+      let discordId = target ? target.replace(/[<@!>]/g, '') : message.author.id;
+      const mcUUID = data.reverseLinks[discordId];
+      if (!mcUUID) return reply('❌ That user has not linked a Minecraft account. They need to run `/link` in-game.');
+      const u = data.users[discordId];
+      if (!u) return reply('❌ No bot profile found for that user.');
+      const civ  = u.civilization ? data.civilizations[u.civilization]?.name : 'None';
+      const rel  = u.religion     ? data.religions[u.religion]?.name        : 'None';
+      const team = u.team         ? data.teams[u.team]?.name                : 'None';
+      reply(`**🎮 Linked Profile** <@${discordId}>\n🏛️ Civilization: **${civ}**\n✝️ Religion: **${rel}**\n🛡️ Team: **${team}**\n💰 Gold: **${data.economy[discordId] || 0}**\n⭐ Level: **${u.level}**`);
+    }
+
     else if (cmd === 'help') {
       reply(
         '**📜 Commands:**\n' +
@@ -1135,7 +1340,8 @@ if (!token) {
         '**Cults:** `!foundcult <n>|<obj>` `!joincult <id>` `!leavecult` `!cults` `!ritual`\n' +
         '**Diplomacy:** `!war <civId>` `!ally <civId>`\n' +
         '**Events:** `!joinevent <id>` `!events`\n' +
-        '**Leader only:** `!promote @user` `!kick @user` `!disband` `!title @user <title>`'
+        '**Leader only:** `!promote @user` `!kick @user` `!disband` `!title @user <title>`\n' +
+        '**Minecraft:** `!link <code>` `!unlink` `!mcplayers` `!mcping` `!mcciv [@user]`'
       );
     }
   });

@@ -1,0 +1,40 @@
+# CivBridge Configuration
+# Connect your Minecraft server to the Civilization Discord Bot
+
+# Base URL of your Civilization Bot API (no trailing slash)
+# Example: https://yourproject.replit.app or http://localhost:3001
+api-url: "http://localhost:3001"
+
+# WebSocket URL for real-time Discord → Minecraft chat relay
+# Use ws:// for plain or wss:// for secure
+ws-url: "ws://localhost:3002"
+
+# API key — must match mcApiKey in your bot's settings dashboard
+api-key: "change-me-to-something-secret"
+
+# Discord channel ID to use as the bridge channel
+# Find it by right-clicking a channel in Discord (Developer Mode must be on)
+bridge-channel-id: ""
+
+# Prefix shown in Minecraft for Discord messages
+discord-prefix: "§9[Discord]§r"
+
+# Prefix shown in Discord for Minecraft messages
+mc-prefix: "[MC]"
+
+# Messages to send to Discord when players join/leave
+announce-join: true
+announce-quit: true
+announce-death: true
+announce-advancement: true
+
+# Send server start/stop messages to Discord
+announce-server-lifecycle: true
+
+# Format strings
+# Available placeholders: {player}, {message}, {world}, {cause}
+chat-format: "<{player}> {message}"
+join-format: "✅ **{player}** joined the server"
+quit-format: "❌ **{player}** left the server"
+death-format: "💀 {message}"
+advancement-format: "🏆 **{player}** earned the advancement **{advancement}**"
