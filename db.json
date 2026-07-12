@@ -1,0 +1,71 @@
+{
+  "servers": {
+    "1522101871156793364": {
+      "serverId": "1522101871156793364",
+      "serverName": "ReactSMP",
+      "setupAt": "2026-07-12T02:55:54.523Z"
+    }
+  },
+  "users": {},
+  "civilizations": {},
+  "religions": {},
+  "teams": {},
+  "cults": {},
+  "rebels": {},
+  "alliances": {},
+  "economy": {},
+  "titles": {},
+  "events": {},
+  "blackmarket": [],
+  "bounties": {},
+  "polls": {},
+  "linkedAccounts": {},
+  "reverseLinks": {},
+  "linkCodes": {},
+  "mcServer": {
+    "players": [],
+    "online": false,
+    "lastSeen": null
+  },
+  "counters": {
+    "civ": 1,
+    "religion": 1,
+    "team": 1,
+    "cult": 1,
+    "alliance": 1,
+    "event": 1,
+    "poll": 1
+  },
+  "features": {
+    "commandsEnabled": true,
+    "autoRegisterMembers": true,
+    "xpEnabled": true,
+    "xpPerMessage": 10,
+    "levelupEnabled": true,
+    "levelupChannelId": "",
+    "welcomeMessages": true,
+    "welcomeChannelId": "",
+    "economyEnabled": true,
+    "dailyRewardAmount": 100,
+    "civilizationsEnabled": true,
+    "religionsEnabled": true,
+    "teamsEnabled": true,
+    "cultsEnabled": true,
+    "rebelsEnabled": true,
+    "warsEnabled": true,
+    "diplomacyAnnouncementsEnabled": true,
+    "diplomacyChannelId": "",
+    "eventsEnabled": true,
+    "eventsChannelId": "",
+    "bountyEnabled": true,
+    "bountyChannelId": "",
+    "pollsEnabled": true,
+    "pollsChannelId": "",
+    "funCommandsEnabled": true,
+    "bridgeEnabled": true,
+    "bridgeChannelId": "",
+    "mcApiKey": "change-me-to-something-secret",
+    "mcEventsEnabled": true,
+    "mcEventsChannelId": ""
+  }
+}

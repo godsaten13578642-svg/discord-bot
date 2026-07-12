@@ -1,0 +1,8 @@
+com/civbot/ws/BotWebSocketClient.class
+com/civbot/api/ApiClient.class
+com/civbot/commands/CivCommand.class
+com/civbot/commands/DiscordCommand.class
+com/civbot/CivBridgePlugin.class
+com/civbot/listeners/PlayerListener.class
+com/civbot/commands/LinkCommand.class
+com/civbot/listeners/ChatListener.class

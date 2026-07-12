@@ -3,8 +3,7 @@ package com.civbot.listeners;
 import com.civbot.CivBridgePlugin;
 import com.civbot.api.ApiClient;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
-import org.bukkit.advancement.AdvancementDisplay;
-import org.bukkit.advancement.AdvancementType;
+import io.papermc.paper.advancement.AdvancementDisplay;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -82,7 +81,7 @@ public class PlayerListener implements Listener {
 
         plugin.getApiClient().postMcEvent("advancement", name,
             fmt.replace("{player}", name).replace("{advancement}", title),
-            Map.of("type", display.type() == AdvancementType.CHALLENGE ? "challenge" : "advancement"));
+            Map.of("advancement", title));
     }
 
     private void updatePlayerList() {

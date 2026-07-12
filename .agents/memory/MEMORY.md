@@ -1,0 +1,2 @@
+- [Paper 1.21.4 Java 21 build](paper-java21-build.md) — Paper 1.21.4 API jar requires Java 21; Replit ships Java 19; must download JDK 21 to ~/.local/jdk-21 to build plugin.
+- [Persistence pattern](persistence-pattern.md) — Data uses db.json file-backed store; saveDb() debounced 1.5s after mutations + 30s interval; loaded at startup via _saved variable.

@@ -9,6 +9,24 @@
 
 ## Building the JAR
 
+> **Important:** Paper 1.21.4 requires **Java 21** to compile against.  
+> The Replit environment ships with Java 19 by default, so you must either:
+> - Build locally on your own machine (Java 21 + Maven installed), or
+> - Use the pre-built JAR already in `target/CivBridge-1.0.0.jar`
+
+To build on Replit (one-time setup — downloads JDK 21 to `~/.local`):
+
+```bash
+mkdir -p ~/.local
+curl -fsSL "https://download.java.net/java/GA/jdk21/fd2272bbf8e04c3dbaee13770090416c/35/GPL/openjdk-21_linux-x64_bin.tar.gz" \
+  -o ~/.local/jdk21.tar.gz
+tar -xzf ~/.local/jdk21.tar.gz -C ~/.local/
+cd minecraft-plugin
+JAVA_HOME=$HOME/.local/jdk-21 PATH=$HOME/.local/jdk-21/bin:$PATH mvn package -q
+```
+
+To build locally (recommended):
+
 ```bash
 cd minecraft-plugin
 mvn package -q
