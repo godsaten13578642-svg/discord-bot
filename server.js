@@ -732,60 +732,66 @@ app.get('/api/mc/linked/:discordId', (req, res) => {
   res.json({ linked: !!mcUUID, mcUUID: mcUUID || null });
 });
 
-// ── WebSocket Server (MC Plugin) ───────────────────────────────────────────────
-const WS_PORT = 3002;
+// ── HTTP + WebSocket Server (same port, path /ws) ──────────────────────────────
+const http = require('http');
+const { WebSocketServer } = require('ws');
 const API_PORT = process.env.PORT || 3001;
 
-const { WebSocketServer } = require('ws');
 global.mcWsClients = global.mcWsClients || new Set();
 
-function startWebSocketServer() {
-  const wss = new WebSocketServer({ port: WS_PORT });
+const httpServer = http.createServer(app);
 
-  wss.on('connection', (ws, req) => {
-    const url = new URL(req.url, `ws://localhost`);
-    const apiKey = url.searchParams.get('apiKey');
-    if (apiKey !== features.mcApiKey) { ws.close(1008, 'Unauthorized'); return; }
+const wss = new WebSocketServer({ noServer: true });
 
-    global.mcWsClients.add(ws);
-    data.mcServer.online = true;
-    data.mcServer.lastSeen = new Date();
-    console.log('🎮 Minecraft plugin connected via WebSocket');
+httpServer.on('upgrade', (req, socket, head) => {
+  const pathname = new URL(req.url, 'http://localhost').pathname;
+  if (pathname === '/ws') {
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+  } else {
+    socket.destroy();
+  }
+});
 
-    ws.on('message', (raw) => {
-      let msg;
-      try { msg = JSON.parse(raw.toString()); } catch { return; }
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url, 'http://localhost');
+  const apiKey = url.searchParams.get('apiKey')
+    || req.headers['x-api-key']
+    || req.headers['authorization']?.replace('Bearer ', '');
+  if (apiKey !== features.mcApiKey) { ws.close(1008, 'Unauthorized'); return; }
 
-      if (msg.type === 'mc_chat' && features.bridgeEnabled && features.bridgeChannelId && global.botClient) {
-        const ch = global.botClient.channels.cache.get(features.bridgeChannelId);
-        if (ch) ch.send(`🎮 **[MC] ${msg.playerName}:** ${msg.content}`).catch(() => {});
-      } else if (msg.type === 'mc_event' && features.mcEventsEnabled && features.mcEventsChannelId && global.botClient) {
-        const ch = global.botClient.channels.cache.get(features.mcEventsChannelId);
-        if (ch && msg.message) ch.send(msg.message).catch(() => {});
-      } else if (msg.type === 'mc_players') {
-        data.mcServer.players = msg.players || [];
-        saveDb();
-      }
-    });
+  global.mcWsClients.add(ws);
+  data.mcServer.online = true;
+  data.mcServer.lastSeen = new Date();
+  console.log('🎮 Minecraft plugin connected via WebSocket');
 
-    ws.on('close', () => {
-      global.mcWsClients.delete(ws);
-      if (global.mcWsClients.size === 0) {
-        data.mcServer.online = false;
-        saveDb();
-      }
-    });
+  ws.on('message', (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw.toString()); } catch { return; }
 
-    ws.on('error', () => global.mcWsClients.delete(ws));
+    if (msg.type === 'mc_chat' && features.bridgeEnabled && features.bridgeChannelId && global.botClient) {
+      const ch = global.botClient.channels.cache.get(features.bridgeChannelId);
+      if (ch) ch.send(`🎮 **[MC] ${msg.playerName}:** ${msg.content}`).catch(() => {});
+    } else if (msg.type === 'mc_event' && features.mcEventsEnabled && features.mcEventsChannelId && global.botClient) {
+      const ch = global.botClient.channels.cache.get(features.mcEventsChannelId);
+      if (ch && msg.message) ch.send(msg.message).catch(() => {});
+    } else if (msg.type === 'mc_players') {
+      data.mcServer.players = msg.players || [];
+      saveDb();
+    }
   });
 
-  console.log(`🔌 WebSocket server on port ${WS_PORT}`);
-}
+  ws.on('close', () => {
+    global.mcWsClients.delete(ws);
+    if (global.mcWsClients.size === 0) {
+      data.mcServer.online = false;
+      saveDb();
+    }
+  });
 
-try { startWebSocketServer(); } catch (e) { console.error('WS start error:', e.message); }
+  ws.on('error', () => global.mcWsClients.delete(ws));
+});
 
-// ── Start HTTP ─────────────────────────────────────────────────────────────────
-app.listen(API_PORT, () => console.log(`🌐 API on port ${API_PORT}`));
+httpServer.listen(API_PORT, () => console.log(`🌐 API + WebSocket on port ${API_PORT} (ws path: /ws)`));
 
 // ── Discord Bot ────────────────────────────────────────────────────────────────
 const token = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;

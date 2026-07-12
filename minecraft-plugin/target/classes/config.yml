@@ -7,7 +7,7 @@ api-url: "http://localhost:3001"
 
 # WebSocket URL for real-time Discord → Minecraft chat relay
 # Use ws:// for plain or wss:// for secure
-ws-url: "ws://localhost:3002"
+ws-url: "ws://localhost:3001/ws"
 
 # API key — must match mcApiKey in your bot's settings dashboard
 api-key: "change-me-to-something-secret"

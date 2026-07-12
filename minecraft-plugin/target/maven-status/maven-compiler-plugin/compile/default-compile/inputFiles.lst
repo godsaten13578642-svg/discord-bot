@@ -4,5 +4,5 @@
 /home/runner/workspace/minecraft-plugin/src/main/java/com/civbot/CivBridgePlugin.java
 /home/runner/workspace/minecraft-plugin/src/main/java/com/civbot/commands/LinkCommand.java
 /home/runner/workspace/minecraft-plugin/src/main/java/com/civbot/listeners/ChatListener.java
-/home/runner/workspace/minecraft-plugin/src/main/java/com/civbot/commands/DiscordCommand.java
 /home/runner/workspace/minecraft-plugin/src/main/java/com/civbot/commands/CivCommand.java
+/home/runner/workspace/minecraft-plugin/src/main/java/com/civbot/commands/DiscordCommand.java
