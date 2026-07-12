@@ -27,6 +27,7 @@ const data = {
   blackmarket:    _saved.blackmarket    || [],
   bounties:       _saved.bounties       || {},  // targetId -> { targetId, amount, placedBy, note, createdAt }
   polls:          _saved.polls          || {},  // id -> { id, question, options:[], votes:{optIdx:[userId]}, createdBy, messageId }
+  giveaways:      _saved.giveaways      || {},  // messageId -> { messageId, channelId, prize, hostId, endsAt, ended, winnerId }
   linkedAccounts: _saved.linkedAccounts || {},
   reverseLinks:   _saved.reverseLinks   || {},
   linkCodes:      _saved.linkCodes      || {},
@@ -69,6 +70,9 @@ const features = Object.assign({
   // Polls
   pollsEnabled:          true,
   pollsChannelId:        '',
+  // Giveaways
+  giveawaysEnabled:      true,
+  giveawayChannelId:     '',
   // Fun commands
   funCommandsEnabled:    true,
   // Minecraft bridge
@@ -876,9 +880,62 @@ const grantLeaderAccess = async (guild, userId, type, groupId) => {
 
 // ── Bot Events ────────────────────────────────────────────────────────────────
 
+// ── Giveaway helpers ───────────────────────────────────────────────────────────
+function parseDuration(str) {
+  const map = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
+  const match = str.match(/^(\d+)(s|m|h|d)$/i);
+  if (!match) return null;
+  return parseInt(match[1]) * map[match[2].toLowerCase()];
+}
+
+function formatDuration(ms) {
+  if (ms >= 86400000) return `${Math.round(ms / 86400000)}d`;
+  if (ms >= 3600000)  return `${Math.round(ms / 3600000)}h`;
+  if (ms >= 60000)    return `${Math.round(ms / 60000)}m`;
+  return `${Math.round(ms / 1000)}s`;
+}
+
+async function endGiveaway(giveaway, reroll = false) {
+  const ch = global.botClient?.channels.cache.get(giveaway.channelId);
+  if (!ch) return;
+  let msg;
+  try { msg = await ch.messages.fetch(giveaway.messageId); } catch { return; }
+
+  const reaction = msg.reactions.cache.get('🎉');
+  let users = [];
+  try {
+    const fetched = await reaction?.users.fetch();
+    users = fetched ? [...fetched.values()].filter(u => !u.bot) : [];
+  } catch {}
+
+  if (!users.length) {
+    msg.edit(`🎉 **GIVEAWAY ENDED**\n**Prize:** ${giveaway.prize}\nNo valid entries — no winner this time.`).catch(() => {});
+    giveaway.ended = true; saveDb(); return;
+  }
+
+  const winner = users[Math.floor(Math.random() * users.length)];
+  giveaway.ended = true;
+  giveaway.winnerId = winner.id;
+  saveDb();
+
+  msg.edit(`🎉 **GIVEAWAY ENDED**\n**Prize:** ${giveaway.prize}\n🏆 Winner: <@${winner.id}>\nHosted by <@${giveaway.hostId}>`).catch(() => {});
+  ch.send(reroll
+    ? `🔄 Rerolled! New winner: <@${winner.id}> wins **${giveaway.prize}**! 🎉`
+    : `🎊 Congratulations <@${winner.id}>! You won **${giveaway.prize}**!`
+  ).catch(() => {});
+}
+
+function scheduleGiveaway(giveaway) {
+  const delay = new Date(giveaway.endsAt) - Date.now();
+  if (delay <= 0) { endGiveaway(giveaway); return; }
+  setTimeout(() => endGiveaway(giveaway), Math.min(delay, 2147483647));
+}
+
 client.once(Events.ClientReady, (c) => {
   console.log(`✅ Discord bot logged in as ${c.user.tag}`);
   c.guilds.cache.forEach(g => { if (!data.servers[g.id]) data.servers[g.id] = { serverId: g.id, serverName: g.name, setupAt: new Date() }; });
+  // Reschedule any active giveaways that survived a restart
+  Object.values(data.giveaways).forEach(g => { if (!g.ended) scheduleGiveaway(g); });
   saveDb();
 });
 
@@ -1056,6 +1113,61 @@ client.on(Events.MessageCreate, async (message) => {
       return `${LETTERS[i]} ${o}\n  ${bar} ${count} votes (${pct}%)`;
     });
     reply(`**📊 Poll Results: ${poll.question}**\n${lines.join('\n')}\n*${total} total vote(s)*`);
+  }
+
+  // ── Giveaways ─────────────────────────────────────────────────────────────────
+  else if (cmd === 'giveaway' || cmd === 'gw') {
+    if (!features.giveawaysEnabled) return reply('❌ Giveaways are disabled.');
+    const sub = args[0]?.toLowerCase();
+
+    // !giveaway end [messageId]  — end a giveaway early
+    if (sub === 'end' || sub === 'cancel') {
+      const msgId = args[1] || Object.values(data.giveaways).find(g => !g.ended)?.messageId;
+      const gw = data.giveaways[msgId];
+      if (!gw || gw.ended) return reply('❌ No active giveaway found with that ID.');
+      await endGiveaway(gw);
+      return;
+    }
+
+    // !giveaway reroll [messageId]
+    if (sub === 'reroll') {
+      const msgId = args[1] || Object.values(data.giveaways).findLast(g => g.ended)?.messageId;
+      const gw = data.giveaways[msgId];
+      if (!gw) return reply('❌ No giveaway found with that ID.');
+      gw.ended = false;
+      await endGiveaway(gw, true);
+      return;
+    }
+
+    // !giveaway <duration> <prize...>  e.g. !giveaway 1h 500 gold
+    const durStr = args[0];
+    const prize = args.slice(1).join(' ');
+    if (!durStr || !prize) return reply('Usage: `!giveaway <duration> <prize>`\nExamples: `!giveaway 1h 500 gold` · `!giveaway 30m Legendary Title`\nDuration: `30s` `5m` `2h` `1d`');
+
+    const duration = parseDuration(durStr);
+    if (!duration) return reply('❌ Invalid duration. Use format like `30s`, `5m`, `2h`, `1d`.');
+    if (duration < 5000) return reply('❌ Minimum duration is 5 seconds.');
+    if (duration > 7 * 86400000) return reply('❌ Maximum duration is 7 days.');
+
+    const endsAt = new Date(Date.now() + duration);
+    const chId = features.giveawayChannelId || message.channel.id;
+    const ch = message.guild?.channels.cache.get(chId) || message.channel;
+
+    const gwMsg = await ch.send(
+      `🎉 **GIVEAWAY** 🎉\n\n` +
+      `**Prize:** ${prize}\n` +
+      `**Ends:** <t:${Math.floor(endsAt / 1000)}:R> (<t:${Math.floor(endsAt / 1000)}:f>)\n` +
+      `**Hosted by:** <@${message.author.id}>\n\n` +
+      `React with 🎉 to enter!`
+    );
+    await gwMsg.react('🎉');
+
+    const gw = { messageId: gwMsg.id, channelId: ch.id, prize, hostId: message.author.id, endsAt: endsAt.toISOString(), ended: false, winnerId: null };
+    data.giveaways[gwMsg.id] = gw;
+    saveDb();
+    scheduleGiveaway(gw);
+
+    if (ch.id !== message.channel.id) reply(`✅ Giveaway started in <#${ch.id}>!`);
   }
 
   // ── Fun Commands ──────────────────────────────────────────────────────────────
@@ -1513,7 +1625,8 @@ client.on(Events.MessageCreate, async (message) => {
   else if (cmd === 'help') {
     const lines = ['**📜 Available Commands:**\n', '`!profile` `!help`'];
     if (features.economyEnabled) lines.push('**💰 Economy:** `!balance` `!daily` `!pay @user <amt>` `!leaderboard` `!treasury` `!deposit <amt>` `!withdraw <amt>`');
-    if (features.bountyEnabled)  lines.push('**🎯 Bounties:** `!bounty @user <amt> [reason]` `!bounties` `!claimbounty @user`');
+    if (features.bountyEnabled)    lines.push('**🎯 Bounties:** `!bounty @user <amt> [reason]` `!bounties` `!claimbounty @user`');
+    if (features.giveawaysEnabled) lines.push('**🎉 Giveaways:** `!giveaway <duration> <prize>` · `!giveaway end` · `!giveaway reroll`');
     if (features.pollsEnabled)   lines.push('**📊 Polls:** `!poll <question> | <opt1> | <opt2>` `!vote <id> <A/B>` `!pollresults <id>`');
     if (features.funCommandsEnabled) lines.push('**🎮 Fun:** `!coinflip` `!roll [sides]` `!8ball <question>` `!rps rock|paper|scissors`');
     if (features.civilizationsEnabled) lines.push(`**🏛️ Civs:** \`!createciv <n>\` \`!joinciv <id>\` \`!leaveciv\` \`!civs\`${features.rebelsEnabled ? ' `!rebel [reason]` `!rebels`' : ''}`);

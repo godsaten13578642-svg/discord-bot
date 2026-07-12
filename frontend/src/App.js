@@ -597,6 +597,12 @@ export default function App() {
               <ChannelSelect label="Polls Channel" description="Where polls are posted by default" value={features.pollsChannelId} onChange={v => setFeature('pollsChannelId', v)} channels={channels} enabled={features.pollsEnabled} />
             </SettingsGroup>
 
+            {/* Giveaways */}
+            <SettingsGroup title="Giveaways" icon="🎉">
+              <Toggle label="Giveaways" description="!giveaway <duration> <prize> — react with 🎉 to enter" checked={features.giveawaysEnabled} onChange={v => toggleFeature('giveawaysEnabled', v)} />
+              <ChannelSelect label="Giveaway Channel" description="Where giveaways are posted (defaults to channel the command is used in)" value={features.giveawayChannelId} onChange={v => setFeature('giveawayChannelId', v)} channels={channels} enabled={features.giveawaysEnabled} />
+            </SettingsGroup>
+
             {/* Fun Commands */}
             <SettingsGroup title="Fun Commands" icon="🎮">
               <Toggle label="Fun Commands" description="!coinflip, !roll, !8ball, !rps" checked={features.funCommandsEnabled} onChange={v => toggleFeature('funCommandsEnabled', v)} />
