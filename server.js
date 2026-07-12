@@ -28,6 +28,7 @@ const data = {
   bounties:       _saved.bounties       || {},  // targetId -> { targetId, amount, placedBy, note, createdAt }
   polls:          _saved.polls          || {},  // id -> { id, question, options:[], votes:{optIdx:[userId]}, createdBy, messageId }
   giveaways:      _saved.giveaways      || {},  // messageId -> { messageId, channelId, prize, hostId, endsAt, ended, winnerId }
+  announcements:  _saved.announcements  || {},  // id -> { id, title, body, channelId, scheduledAt, sentAt, cancelled }
   linkedAccounts: _saved.linkedAccounts || {},
   reverseLinks:   _saved.reverseLinks   || {},
   linkCodes:      _saved.linkCodes      || {},
@@ -70,6 +71,8 @@ const features = Object.assign({
   // Polls
   pollsEnabled:          true,
   pollsChannelId:        '',
+  // Announcements
+  announcementChannelId: '',
   // Giveaways
   giveawaysEnabled:      true,
   giveawayChannelId:     '',

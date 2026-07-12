@@ -117,7 +117,7 @@
     "pollsEnabled": true,
     "pollsChannelId": "1522289514096099338",
     "giveawaysEnabled": true,
-    "giveawayChannelId": "",
+    "giveawayChannelId": "1522289514096099338",
     "funCommandsEnabled": true,
     "bridgeEnabled": true,
     "bridgeChannelId": "1525712056005820508",
