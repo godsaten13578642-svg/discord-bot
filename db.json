@@ -114,14 +114,14 @@
     "pollsEnabled": true,
     "pollsChannelId": "1522289514096099338",
     "funCommandsEnabled": true,
-    "magmaNodeEnabled": false,
-    "magmaNodePanelUrl": "https://panel.magmanode.com",
-    "magmaNodeApiKey": "",
-    "magmaNodeServerId": "",
     "bridgeEnabled": true,
     "bridgeChannelId": "1525712056005820508",
     "mcApiKey": "n1110wql94vdxgaj2p9m",
     "mcEventsEnabled": true,
-    "mcEventsChannelId": "1525712056005820508"
+    "mcEventsChannelId": "1525712056005820508",
+    "magmaNodeEnabled": false,
+    "magmaNodePanelUrl": "https://panel.magmanode.com",
+    "magmaNodeApiKey": "",
+    "magmaNodeServerId": ""
   }
 }
