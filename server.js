@@ -901,27 +901,44 @@ async function endGiveaway(giveaway, reroll = false) {
   let msg;
   try { msg = await ch.messages.fetch(giveaway.messageId); } catch { return; }
 
-  const reaction = msg.reactions.cache.get('🎉');
-  let users = [];
-  try {
-    const fetched = await reaction?.users.fetch();
-    users = fetched ? [...fetched.values()].filter(u => !u.bot) : [];
-  } catch {}
+  let entrantIds = [];
 
-  if (!users.length) {
+  if (giveaway.mode === 'auto') {
+    // Auto mode: everyone registered in the bot at time of draw
+    const guild = global.botClient?.guilds.cache.get(giveaway.guildId);
+    if (guild) {
+      try {
+        const members = await guild.members.fetch();
+        entrantIds = [...members.values()].filter(m => !m.user.bot).map(m => m.id);
+      } catch {
+        entrantIds = Object.keys(data.users);
+      }
+    } else {
+      entrantIds = Object.keys(data.users);
+    }
+  } else {
+    // React mode: only people who reacted 🎉
+    const reaction = msg.reactions.cache.get('🎉');
+    try {
+      const fetched = await reaction?.users.fetch();
+      entrantIds = fetched ? [...fetched.values()].filter(u => !u.bot).map(u => u.id) : [];
+    } catch {}
+  }
+
+  if (!entrantIds.length) {
     msg.edit(`🎉 **GIVEAWAY ENDED**\n**Prize:** ${giveaway.prize}\nNo valid entries — no winner this time.`).catch(() => {});
     giveaway.ended = true; saveDb(); return;
   }
 
-  const winner = users[Math.floor(Math.random() * users.length)];
+  const winnerId = entrantIds[Math.floor(Math.random() * entrantIds.length)];
   giveaway.ended = true;
-  giveaway.winnerId = winner.id;
+  giveaway.winnerId = winnerId;
   saveDb();
 
-  msg.edit(`🎉 **GIVEAWAY ENDED**\n**Prize:** ${giveaway.prize}\n🏆 Winner: <@${winner.id}>\nHosted by <@${giveaway.hostId}>`).catch(() => {});
+  msg.edit(`🎉 **GIVEAWAY ENDED**\n**Prize:** ${giveaway.prize}\n🏆 Winner: <@${winnerId}>\nHosted by <@${giveaway.hostId}>`).catch(() => {});
   ch.send(reroll
-    ? `🔄 Rerolled! New winner: <@${winner.id}> wins **${giveaway.prize}**! 🎉`
-    : `🎊 Congratulations <@${winner.id}>! You won **${giveaway.prize}**!`
+    ? `🔄 Rerolled! New winner: <@${winnerId}> wins **${giveaway.prize}**! 🎉`
+    : `🎊 Congratulations <@${winnerId}>! You won **${giveaway.prize}**!`
   ).catch(() => {});
 }
 
@@ -1139,10 +1156,28 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
-    // !giveaway <duration> <prize...>  e.g. !giveaway 1h 500 gold
-    const durStr = args[0];
-    const prize = args.slice(1).join(' ');
-    if (!durStr || !prize) return reply('Usage: `!giveaway <duration> <prize>`\nExamples: `!giveaway 1h 500 gold` · `!giveaway 30m Legendary Title`\nDuration: `30s` `5m` `2h` `1d`');
+    // !giveaway [auto|react] <duration> <prize...>
+    // Detect optional mode keyword
+    let mode = 'react'; // default
+    let argOffset = 0;
+    if (sub === 'auto' || sub === 'react') {
+      mode = sub;
+      argOffset = 1;
+    }
+
+    const durStr = args[argOffset];
+    const prize = args.slice(argOffset + 1).join(' ');
+
+    if (!durStr || !prize) {
+      return reply(
+        '**Usage:**\n' +
+        '`!giveaway <duration> <prize>` — members must react 🎉 to enter\n' +
+        '`!giveaway auto <duration> <prize>` — everyone is entered automatically\n' +
+        '`!giveaway react <duration> <prize>` — same as default (react to enter)\n\n' +
+        '**Examples:** `!giveaway 1h 500 gold` · `!giveaway auto 30m Legendary Title`\n' +
+        '**Duration:** `30s` `5m` `2h` `1d`'
+      );
+    }
 
     const duration = parseDuration(durStr);
     if (!duration) return reply('❌ Invalid duration. Use format like `30s`, `5m`, `2h`, `1d`.');
@@ -1153,21 +1188,29 @@ client.on(Events.MessageCreate, async (message) => {
     const chId = features.giveawayChannelId || message.channel.id;
     const ch = message.guild?.channels.cache.get(chId) || message.channel;
 
+    const modeLabel = mode === 'auto'
+      ? '🤖 **Auto-entry** — everyone in the server is entered automatically!'
+      : '🎉 React with **🎉** to enter!';
+
     const gwMsg = await ch.send(
       `🎉 **GIVEAWAY** 🎉\n\n` +
       `**Prize:** ${prize}\n` +
       `**Ends:** <t:${Math.floor(endsAt / 1000)}:R> (<t:${Math.floor(endsAt / 1000)}:f>)\n` +
       `**Hosted by:** <@${message.author.id}>\n\n` +
-      `React with 🎉 to enter!`
+      modeLabel
     );
-    await gwMsg.react('🎉');
+    if (mode === 'react') await gwMsg.react('🎉');
 
-    const gw = { messageId: gwMsg.id, channelId: ch.id, prize, hostId: message.author.id, endsAt: endsAt.toISOString(), ended: false, winnerId: null };
+    const gw = {
+      messageId: gwMsg.id, channelId: ch.id, guildId: message.guild?.id,
+      prize, hostId: message.author.id, mode,
+      endsAt: endsAt.toISOString(), ended: false, winnerId: null
+    };
     data.giveaways[gwMsg.id] = gw;
     saveDb();
     scheduleGiveaway(gw);
 
-    if (ch.id !== message.channel.id) reply(`✅ Giveaway started in <#${ch.id}>!`);
+    if (ch.id !== message.channel.id) reply(`✅ ${mode === 'auto' ? '🤖 Auto-entry' : '🎉 React-to-enter'} giveaway started in <#${ch.id}>!`);
   }
 
   // ── Fun Commands ──────────────────────────────────────────────────────────────
@@ -1626,7 +1669,7 @@ client.on(Events.MessageCreate, async (message) => {
     const lines = ['**📜 Available Commands:**\n', '`!profile` `!help`'];
     if (features.economyEnabled) lines.push('**💰 Economy:** `!balance` `!daily` `!pay @user <amt>` `!leaderboard` `!treasury` `!deposit <amt>` `!withdraw <amt>`');
     if (features.bountyEnabled)    lines.push('**🎯 Bounties:** `!bounty @user <amt> [reason]` `!bounties` `!claimbounty @user`');
-    if (features.giveawaysEnabled) lines.push('**🎉 Giveaways:** `!giveaway <duration> <prize>` · `!giveaway end` · `!giveaway reroll`');
+    if (features.giveawaysEnabled) lines.push('**🎉 Giveaways:** `!giveaway <dur> <prize>` (react) · `!giveaway auto <dur> <prize>` (auto-enter all) · `!giveaway end` · `!giveaway reroll`');
     if (features.pollsEnabled)   lines.push('**📊 Polls:** `!poll <question> | <opt1> | <opt2>` `!vote <id> <A/B>` `!pollresults <id>`');
     if (features.funCommandsEnabled) lines.push('**🎮 Fun:** `!coinflip` `!roll [sides]` `!8ball <question>` `!rps rock|paper|scissors`');
     if (features.civilizationsEnabled) lines.push(`**🏛️ Civs:** \`!createciv <n>\` \`!joinciv <id>\` \`!leaveciv\` \`!civs\`${features.rebelsEnabled ? ' `!rebel [reason]` `!rebels`' : ''}`);
