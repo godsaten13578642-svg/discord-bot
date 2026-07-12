@@ -71,6 +71,11 @@ const features = Object.assign({
   pollsChannelId:        '',
   // Fun commands
   funCommandsEnabled:    true,
+  // Magma Node server control
+  magmaNodeEnabled:      false,
+  magmaNodePanelUrl:     'https://panel.magmanode.com',
+  magmaNodeApiKey:       '',
+  magmaNodeServerId:     '',
   // Minecraft bridge
   bridgeEnabled:         true,
   bridgeChannelId:       '',
@@ -1509,6 +1514,44 @@ client.on(Events.MessageCreate, async (message) => {
     reply(`**🎮 Linked Profile** <@${discordId}>\n🏛️ Civ: **${civ}** | ✝️ Religion: **${rel}** | 🛡️ Team: **${team}**\n💰 Gold: **${data.economy[discordId] || 0}** | ⭐ Level: **${u.level}**`);
   }
 
+  // ── Magma Node Server Control ─────────────────────────────────────────────────
+  else if (['startserver','stopserver','restartserver','killserver','serverstatus'].includes(cmd)) {
+    if (!features.magmaNodeEnabled) return reply('❌ Magma Node control is disabled. Enable it in the Settings tab.');
+    if (!features.magmaNodeApiKey || !features.magmaNodeServerId) return reply('❌ Magma Node API key or server ID not configured. Check Settings.');
+
+    const panelUrl = (features.magmaNodePanelUrl || 'https://panel.magmanode.com').replace(/\/$/, '');
+    const serverId = features.magmaNodeServerId;
+    const headers  = { 'Authorization': `Bearer ${features.magmaNodeApiKey}`, 'Content-Type': 'application/json', 'Accept': 'application/json' };
+
+    if (cmd === 'serverstatus') {
+      try {
+        const r = await fetch(`${panelUrl}/api/client/servers/${serverId}/resources`, { headers });
+        if (!r.ok) return reply(`❌ Panel returned ${r.status}. Check your API key and server ID.`);
+        const j = await r.json();
+        const s = j?.attributes?.current_state || 'unknown';
+        const cpu  = j?.attributes?.resources?.cpu_absolute?.toFixed(1) || '?';
+        const ram  = ((j?.attributes?.resources?.memory_bytes || 0) / 1024 / 1024).toFixed(0);
+        const disk = ((j?.attributes?.resources?.disk_bytes   || 0) / 1024 / 1024).toFixed(0);
+        const icon = { running:'🟢', starting:'🟡', stopping:'🟠', offline:'🔴' }[s] || '⚪';
+        reply(`${icon} **Server status: ${s.toUpperCase()}**\nCPU: ${cpu}% | RAM: ${ram} MB | Disk: ${disk} MB`);
+      } catch (e) { reply(`❌ Could not reach panel: ${e.message}`); }
+    } else {
+      const signal = { startserver:'start', stopserver:'stop', restartserver:'restart', killserver:'kill' }[cmd];
+      const label  = { start:'▶️ Starting', stop:'⏹️ Stopping', restart:'🔄 Restarting', kill:'💀 Force-killing' }[signal];
+      try {
+        const r = await fetch(`${panelUrl}/api/client/servers/${serverId}/power`, {
+          method: 'POST', headers, body: JSON.stringify({ signal })
+        });
+        if (r.status === 204 || r.ok) {
+          reply(`${label} the Minecraft server… ✅`);
+        } else {
+          const txt = await r.text().catch(() => '');
+          reply(`❌ Panel returned ${r.status}: ${txt.slice(0, 200)}`);
+        }
+      } catch (e) { reply(`❌ Could not reach panel: ${e.message}`); }
+    }
+  }
+
   // ── Help ──────────────────────────────────────────────────────────────────────
   else if (cmd === 'help') {
     const lines = ['**📜 Available Commands:**\n', '`!profile` `!help`'];
@@ -1523,7 +1566,8 @@ client.on(Events.MessageCreate, async (message) => {
     if (features.warsEnabled)     lines.push('**⚔️ Diplomacy:** `!war <civId>` `!ally <civId>`');
     if (features.eventsEnabled)   lines.push('**📅 Events:** `!joinevent <id>` `!events`');
     lines.push('**👑 Leader only:** `!promote @user` `!kick @user` `!disband` `!title @user <title>`');
-    if (features.bridgeEnabled)   lines.push('**🎮 Minecraft:** `!link <code>` `!unlink` `!mcplayers` `!mcping` `!mcciv [@user]`');
+    if (features.bridgeEnabled)     lines.push('**🎮 Minecraft:** `!link <code>` `!unlink` `!mcplayers` `!mcping` `!mcciv [@user]`');
+    if (features.magmaNodeEnabled)  lines.push('**🖥️ Server:** `!startserver` `!stopserver` `!restartserver` `!serverstatus`');
     reply(lines.join('\n'));
   }
 });

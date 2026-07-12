@@ -602,6 +602,41 @@ export default function App() {
               <Toggle label="Fun Commands" description="!coinflip, !roll, !8ball, !rps" checked={features.funCommandsEnabled} onChange={v => toggleFeature('funCommandsEnabled', v)} />
             </SettingsGroup>
 
+            {/* Magma Node Server Control */}
+            <SettingsGroup title="Magma Node Server Control" icon="🖥️">
+              <Toggle label="Enable Server Control" description="!startserver, !stopserver, !restartserver, !serverstatus" checked={features.magmaNodeEnabled} onChange={v => toggleFeature('magmaNodeEnabled', v)} />
+              <div style={{ padding: '11px 0', borderBottom: '1px solid #f5f5f5', opacity: features.magmaNodeEnabled ? 1 : 0.45 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Panel URL</div>
+                <div style={{ fontSize: 12, color: '#999', marginBottom: 6 }}>Your Magma Node panel URL (default: https://panel.magmanode.com)</div>
+                <input
+                  type="text" value={features.magmaNodePanelUrl || ''} disabled={!features.magmaNodeEnabled}
+                  onChange={e => setFeature('magmaNodePanelUrl', e.target.value)}
+                  placeholder="https://panel.magmanode.com"
+                  style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ padding: '11px 0', borderBottom: '1px solid #f5f5f5', opacity: features.magmaNodeEnabled ? 1 : 0.45 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Client API Key</div>
+                <div style={{ fontSize: 12, color: '#999', marginBottom: 6 }}>From Magma Node panel → Account → API Credentials</div>
+                <input
+                  type="password" value={features.magmaNodeApiKey || ''} disabled={!features.magmaNodeEnabled}
+                  onChange={e => setFeature('magmaNodeApiKey', e.target.value)}
+                  placeholder="ptlc_xxxxxxxxxxxxxxxxxxxx"
+                  style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ padding: '11px 0', opacity: features.magmaNodeEnabled ? 1 : 0.45 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Server ID</div>
+                <div style={{ fontSize: 12, color: '#999', marginBottom: 6 }}>Short alphanumeric ID from your server's URL (e.g. <code>a1b2c3d4</code>)</div>
+                <input
+                  type="text" value={features.magmaNodeServerId || ''} disabled={!features.magmaNodeEnabled}
+                  onChange={e => setFeature('magmaNodeServerId', e.target.value)}
+                  placeholder="a1b2c3d4"
+                  style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                />
+              </div>
+            </SettingsGroup>
+
             {/* Groups */}
             <SettingsGroup title="Groups & Factions" icon="🏛️">
               <Toggle label="Civilizations" description="Allow creating/joining civilizations" checked={features.civilizationsEnabled} onChange={v => toggleFeature('civilizationsEnabled', v)} />
