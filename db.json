@@ -6,7 +6,25 @@
       "setupAt": "2026-07-12T02:55:54.523Z"
     }
   },
-  "users": {},
+  "users": {
+    "1023620662625050734": {
+      "id": "1023620662625050734",
+      "username": "1023620662625050734",
+      "level": 1,
+      "xp": 30,
+      "nextLevelXp": 1000,
+      "reputation": 0,
+      "rank": "Member",
+      "civilization": null,
+      "religion": null,
+      "team": null,
+      "cult": null,
+      "isRebel": false,
+      "honors": [],
+      "titles": [],
+      "lastDaily": null
+    }
+  },
   "civilizations": {},
   "religions": {},
   "teams": {},
@@ -42,9 +60,9 @@
     "xpEnabled": true,
     "xpPerMessage": 10,
     "levelupEnabled": true,
-    "levelupChannelId": "",
+    "levelupChannelId": "1525703156514689114",
     "welcomeMessages": true,
-    "welcomeChannelId": "",
+    "welcomeChannelId": "1525703156514689114",
     "economyEnabled": true,
     "dailyRewardAmount": 100,
     "civilizationsEnabled": true,
@@ -54,18 +72,18 @@
     "rebelsEnabled": true,
     "warsEnabled": true,
     "diplomacyAnnouncementsEnabled": true,
-    "diplomacyChannelId": "",
+    "diplomacyChannelId": "1525703156514689114",
     "eventsEnabled": true,
-    "eventsChannelId": "",
+    "eventsChannelId": "1525703156514689114",
     "bountyEnabled": true,
-    "bountyChannelId": "",
+    "bountyChannelId": "1525703156514689114",
     "pollsEnabled": true,
-    "pollsChannelId": "",
+    "pollsChannelId": "1525703156514689114",
     "funCommandsEnabled": true,
     "bridgeEnabled": true,
-    "bridgeChannelId": "",
-    "mcApiKey": "change-me-to-something-secret",
+    "bridgeChannelId": "1525703156514689114",
+    "mcApiKey": "n1110wql94vdxgaj2p9m",
     "mcEventsEnabled": true,
-    "mcEventsChannelId": ""
+    "mcEventsChannelId": "1525703156514689114"
   }
 }
