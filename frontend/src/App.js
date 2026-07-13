@@ -5,7 +5,7 @@ const api  = (path, opts) => fetch(path, opts).then(r => r.json());
 const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const del  = (path) => api(path, { method: 'DELETE' });
 
-const TABS = ['Dashboard','Civilizations','Religions','Teams','Cults','Diplomacy','Economy','Events','Members','Servers','Settings'];
+const TABS = ['Dashboard','Civilizations','Religions','Teams','Cults','Diplomacy','Economy','Events','Members','Servers','Announcements','Settings'];
 
 const S = {
   card:    { background: 'white', borderRadius: 10, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,.08)', marginBottom: 16 },
@@ -137,9 +137,16 @@ export default function App() {
   const [confirm, setConfirm] = useState(null);
   const [toast,   setToast]   = useState(null);
   const [form,    setForm]    = useState({});
+  const [announcements, setAnnouncements] = useState([]);
+  const [ann, setAnn] = useState({ title: '', body: '', channelId: '', scheduledAt: '' });
 
   const showToast  = (msg, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3200); };
   const closeModal = () => { setModal(null); setForm({}); };
+
+  const loadAnnouncements = useCallback(async () => {
+    const anns = await api('/api/announcements').catch(() => []);
+    if (Array.isArray(anns)) setAnnouncements(anns.sort((a, b) => b.id - a.id));
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -150,11 +157,11 @@ export default function App() {
         api('/api/events'), api('/api/bounties'),
       ]);
       setState({ stats, bot, civs, users, servers, features, religions, teams, cults, rebels, alliances, economy, events, bounties });
-      // Fetch channels separately (only works when bot is online)
       const chs = await api('/api/channels').catch(() => []);
       if (Array.isArray(chs)) setChannels(chs);
     } catch (_) {}
-  }, []);
+    loadAnnouncements();
+  }, [loadAnnouncements]);
 
   useEffect(() => { load(); const t = setInterval(load, 8000); return () => clearInterval(t); }, [load]);
 
@@ -548,6 +555,111 @@ export default function App() {
           </div>
         )}
 
+        {/* Announcements */}
+        {tab === 'Announcements' && (
+          <div>
+            {/* Compose */}
+            <div style={S.card}>
+              <h3 style={{ margin: '0 0 16px' }}>📢 Compose Announcement</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={S.label}>Title <span style={{ fontWeight: 400, color: '#bbb' }}>(optional)</span></label>
+                  <input
+                    value={ann.title} onChange={e => setAnn(a => ({ ...a, title: e.target.value }))}
+                    placeholder="e.g. Server Event This Weekend!"
+                    style={{ width: '100%', padding: '8px 11px', border: '1.5px solid #ddd', borderRadius: 7, fontSize: 14, boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={S.label}>Message <span style={{ color: '#dc3545' }}>*</span></label>
+                  <textarea
+                    value={ann.body} onChange={e => setAnn(a => ({ ...a, body: e.target.value }))}
+                    placeholder="Write your announcement here..."
+                    rows={5}
+                    style={{ width: '100%', padding: '8px 11px', border: '1.5px solid #ddd', borderRadius: 7, fontSize: 14, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  />
+                </div>
+                <div>
+                  <label style={S.label}>Channel</label>
+                  <select
+                    value={ann.channelId || features?.announcementChannelId || ''}
+                    onChange={e => setAnn(a => ({ ...a, channelId: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 11px', border: '1.5px solid #ddd', borderRadius: 7, fontSize: 14 }}
+                  >
+                    <option value="">— Use default announcement channel —</option>
+                    {channels.map(ch => <option key={ch.id} value={ch.id}>{ch.name} ({ch.guild})</option>)}
+                  </select>
+                  {!channels.length && <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 4 }}>⚠️ Bot must be online to load channels. Set a default in Settings.</div>}
+                </div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 220 }}>
+                    <label style={S.label}>Schedule for <span style={{ fontWeight: 400, color: '#bbb' }}>(leave blank to send now)</span></label>
+                    <input
+                      type="datetime-local"
+                      value={ann.scheduledAt} onChange={e => setAnn(a => ({ ...a, scheduledAt: e.target.value }))}
+                      style={{ width: '100%', padding: '8px 11px', border: '1.5px solid #ddd', borderRadius: 7, fontSize: 14, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <Btn color="#198754" onClick={async () => {
+                      if (!ann.body.trim()) { showToast('Message body is required', false); return; }
+                      const chId = ann.channelId || features?.announcementChannelId;
+                      if (!chId) { showToast('Select a channel first', false); return; }
+                      if (ann.scheduledAt) {
+                        const r = await post('/api/announcements/schedule', { ...ann, channelId: chId, scheduledAt: new Date(ann.scheduledAt).toISOString() });
+                        if (r.error) { showToast(r.error, false); return; }
+                        showToast('Announcement scheduled! ⏰');
+                      } else {
+                        const r = await post('/api/announcements/send', { ...ann, channelId: chId });
+                        if (r.error) { showToast(r.error, false); return; }
+                        showToast('Announcement sent! 📢');
+                      }
+                      setAnn({ title: '', body: '', channelId: '', scheduledAt: '' });
+                      loadAnnouncements();
+                    }}>
+                      {ann.scheduledAt ? '⏰ Schedule' : '📢 Send Now'}
+                    </Btn>
+                    <Btn outline color="#6c757d" onClick={() => setAnn({ title: '', body: '', channelId: '', scheduledAt: '' })}>Clear</Btn>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* History & Scheduled */}
+            <div style={S.card}>
+              <h3 style={{ margin: '0 0 14px' }}>📋 Announcement History</h3>
+              {!announcements.length && <EmptyState icon="📢" text="No announcements yet" />}
+              {announcements.map(a => {
+                const isPending  = a.scheduledAt && !a.sentAt && !a.cancelled;
+                const isSent     = !!a.sentAt;
+                const isCancelled = a.cancelled;
+                const statusColor = isPending ? '#f59e0b' : isSent ? '#198754' : '#aaa';
+                const statusText  = isPending ? `⏰ Scheduled: ${new Date(a.scheduledAt).toLocaleString()}` : isSent ? `✅ Sent: ${new Date(a.sentAt).toLocaleString()}` : '❌ Cancelled';
+                const ch = channels.find(c => c.id === a.channelId);
+                return (
+                  <div key={a.id} style={{ borderBottom: '1px solid #f0f0f0', padding: '12px 0', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {a.title && <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{a.title}</div>}
+                      <div style={{ fontSize: 13, color: '#444', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 80, overflow: 'hidden' }}>{a.body}</div>
+                      <div style={{ marginTop: 6, display: 'flex', gap: 12, fontSize: 12, color: '#999', flexWrap: 'wrap' }}>
+                        <span style={{ color: statusColor, fontWeight: 600 }}>{statusText}</span>
+                        {ch && <span>#{ch.name}</span>}
+                      </div>
+                    </div>
+                    {isPending && (
+                      <Btn small color="#dc3545" outline onClick={async () => {
+                        await del(`/api/announcements/${a.id}`);
+                        showToast('Cancelled');
+                        loadAnnouncements();
+                      }}>Cancel</Btn>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Settings */}
         {tab === 'Settings' && features && (
           <div style={{ display: 'grid', gap: 0 }}>
@@ -601,6 +713,10 @@ export default function App() {
             <SettingsGroup title="Giveaways" icon="🎉">
               <Toggle label="Giveaways" description="!giveaway <duration> <prize> — react with 🎉 to enter" checked={features.giveawaysEnabled} onChange={v => toggleFeature('giveawaysEnabled', v)} />
               <ChannelSelect label="Giveaway Channel" description="Where giveaways are posted (defaults to channel the command is used in)" value={features.giveawayChannelId} onChange={v => setFeature('giveawayChannelId', v)} channels={channels} enabled={features.giveawaysEnabled} />
+            </SettingsGroup>
+
+            <SettingsGroup title="Announcements" icon="📢">
+              <ChannelSelect label="Default Announcement Channel" description="Channel used when no channel is selected in the Announcements tab" value={features.announcementChannelId} onChange={v => setFeature('announcementChannelId', v)} channels={channels} enabled={true} />
             </SettingsGroup>
 
             {/* Fun Commands */}

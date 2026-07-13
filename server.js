@@ -660,6 +660,67 @@ app.delete('/api/polls/:id', (req, res) => {
   res.json({ success: true });
 });
 
+// ── Announcements ──────────────────────────────────────────────────────────────
+let annIdCounter = _saved.annIdCounter || 1;
+
+function sendAnnouncement(ann) {
+  if (!global.botClient) return;
+  const ch = global.botClient.channels.cache.get(ann.channelId);
+  if (!ch) return;
+  const msg = ann.title
+    ? `📢 **${ann.title}**\n\n${ann.body}`
+    : `📢 ${ann.body}`;
+  ch.send(msg).catch(() => {});
+  ann.sentAt = new Date().toISOString();
+  saveDb();
+}
+
+function scheduleAnnouncement(ann) {
+  const delay = new Date(ann.scheduledAt) - Date.now();
+  if (delay <= 0) {
+    if (!ann.sentAt && !ann.cancelled) sendAnnouncement(ann);
+    return;
+  }
+  ann._timer = setTimeout(() => {
+    if (!ann.cancelled) sendAnnouncement(ann);
+  }, Math.min(delay, 2147483647));
+}
+
+app.get('/api/announcements', (_, res) => res.json(Object.values(data.announcements)));
+
+app.post('/api/announcements/send', (req, res) => {
+  const { title, body, channelId } = req.body;
+  if (!body) return res.status(400).json({ error: 'Body required' });
+  const chId = channelId || features.announcementChannelId;
+  if (!chId) return res.status(400).json({ error: 'No channel selected' });
+  const ann = { id: annIdCounter++, title: title || '', body, channelId: chId, scheduledAt: null, sentAt: null, cancelled: false };
+  data.announcements[ann.id] = ann;
+  sendAnnouncement(ann);
+  saveDb();
+  res.json({ success: true, announcement: ann });
+});
+
+app.post('/api/announcements/schedule', (req, res) => {
+  const { title, body, channelId, scheduledAt } = req.body;
+  if (!body) return res.status(400).json({ error: 'Body required' });
+  if (!scheduledAt) return res.status(400).json({ error: 'scheduledAt required' });
+  const chId = channelId || features.announcementChannelId;
+  if (!chId) return res.status(400).json({ error: 'No channel selected' });
+  const ann = { id: annIdCounter++, title: title || '', body, channelId: chId, scheduledAt, sentAt: null, cancelled: false };
+  data.announcements[ann.id] = ann;
+  scheduleAnnouncement(ann);
+  saveDb();
+  res.json({ success: true, announcement: ann });
+});
+
+app.delete('/api/announcements/:id', (req, res) => {
+  const ann = data.announcements[req.params.id];
+  if (!ann) return res.status(404).json({ error: 'Not found' });
+  ann.cancelled = true;
+  saveDb();
+  res.json({ success: true });
+});
+
 // ── Servers ────────────────────────────────────────────────────────────────────
 app.get('/api/servers', (_, res) => res.json(Object.values(data.servers)));
 app.post('/api/servers/setup', (req, res) => {
@@ -956,6 +1017,8 @@ client.once(Events.ClientReady, (c) => {
   c.guilds.cache.forEach(g => { if (!data.servers[g.id]) data.servers[g.id] = { serverId: g.id, serverName: g.name, setupAt: new Date() }; });
   // Reschedule any active giveaways that survived a restart
   Object.values(data.giveaways).forEach(g => { if (!g.ended) scheduleGiveaway(g); });
+  // Reschedule any pending announcements
+  Object.values(data.announcements).forEach(a => { if (a.scheduledAt && !a.sentAt && !a.cancelled) scheduleAnnouncement(a); });
   saveDb();
 });
 

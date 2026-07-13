@@ -11,7 +11,7 @@
       "id": "1023620662625050734",
       "username": "1023620662625050734",
       "level": 1,
-      "xp": 100,
+      "xp": 670,
       "nextLevelXp": 1000,
       "reputation": 0,
       "rank": "Member",
@@ -28,7 +28,7 @@
       "id": "1246200243557765272",
       "username": "1246200243557765272",
       "level": 1,
-      "xp": 20,
+      "xp": 70,
       "nextLevelXp": 1000,
       "reputation": 0,
       "rank": "Member",
@@ -57,6 +57,40 @@
       "honors": [],
       "titles": [],
       "lastDaily": null
+    },
+    "1520898192437285108": {
+      "id": "1520898192437285108",
+      "username": "1520898192437285108",
+      "level": 1,
+      "xp": 350,
+      "nextLevelXp": 1000,
+      "reputation": 0,
+      "rank": "Member",
+      "civilization": null,
+      "religion": null,
+      "team": null,
+      "cult": null,
+      "isRebel": false,
+      "honors": [],
+      "titles": [],
+      "lastDaily": null
+    },
+    "1416183527996784851": {
+      "id": "1416183527996784851",
+      "username": "1416183527996784851",
+      "level": 1,
+      "xp": 290,
+      "nextLevelXp": 1000,
+      "reputation": 0,
+      "rank": "Member",
+      "civilization": null,
+      "religion": null,
+      "team": null,
+      "cult": null,
+      "isRebel": false,
+      "honors": [],
+      "titles": [],
+      "lastDaily": null
     }
   },
   "civilizations": {},
@@ -73,14 +107,30 @@
   "blackmarket": [],
   "bounties": {},
   "polls": {},
-  "giveaways": {},
+  "giveaways": {
+    "1525749006591066204": {
+      "messageId": "1525749006591066204",
+      "channelId": "1522289514096099338",
+      "guildId": "1522101871156793364",
+      "prize": "upgrade-action",
+      "hostId": "1023620662625050734",
+      "mode": "react",
+      "endsAt": "2026-07-14T06:21:50.132Z",
+      "ended": false,
+      "winnerId": null
+    }
+  },
+  "announcements": {},
   "linkedAccounts": {},
   "reverseLinks": {},
   "linkCodes": {},
   "mcServer": {
-    "players": [],
+    "players": [
+      "1MM0RT4LB13NG",
+      "memegodmidas"
+    ],
     "online": true,
-    "lastSeen": "2026-07-12T04:13:32.462Z"
+    "lastSeen": "2026-07-13T00:50:02.310Z"
   },
   "counters": {
     "civ": 1,
@@ -111,11 +161,12 @@
     "diplomacyAnnouncementsEnabled": false,
     "diplomacyChannelId": "1525703156514689114",
     "eventsEnabled": true,
-    "eventsChannelId": "1525703156514689114",
+    "eventsChannelId": "1522102134793830471",
     "bountyEnabled": false,
     "bountyChannelId": "1525703156514689114",
     "pollsEnabled": true,
     "pollsChannelId": "1522289514096099338",
+    "announcementChannelId": "",
     "giveawaysEnabled": true,
     "giveawayChannelId": "1522289514096099338",
     "funCommandsEnabled": true,
