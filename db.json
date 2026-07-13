@@ -11,7 +11,7 @@
       "id": "1023620662625050734",
       "username": "1023620662625050734",
       "level": 1,
-      "xp": 670,
+      "xp": 690,
       "nextLevelXp": 1000,
       "reputation": 0,
       "rank": "Member",
@@ -62,7 +62,7 @@
       "id": "1520898192437285108",
       "username": "1520898192437285108",
       "level": 1,
-      "xp": 350,
+      "xp": 370,
       "nextLevelXp": 1000,
       "reputation": 0,
       "rank": "Member",
@@ -130,7 +130,10 @@
       "memegodmidas"
     ],
     "online": true,
-    "lastSeen": "2026-07-13T00:50:02.310Z"
+    "lastSeen": "2026-07-13T00:50:02.310Z",
+    "chatLog": [],
+    "eventLog": [],
+    "commandLog": []
   },
   "counters": {
     "civ": 1,
@@ -166,7 +169,7 @@
     "bountyChannelId": "1525703156514689114",
     "pollsEnabled": true,
     "pollsChannelId": "1522289514096099338",
-    "announcementChannelId": "",
+    "announcementChannelId": "1522102134793830471",
     "giveawaysEnabled": true,
     "giveawayChannelId": "1522289514096099338",
     "funCommandsEnabled": true,

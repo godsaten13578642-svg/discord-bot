@@ -76,6 +76,38 @@ public class BotWebSocketClient extends WebSocketClient {
                     pong.addProperty("playerCount", plugin.getServer().getOnlinePlayers().size());
                     send(gson.toJson(pong));
                 }
+                case "run_command" -> {
+                    String command = msg.has("command") ? msg.get("command").getAsString() : "";
+                    if (!command.isEmpty()) {
+                        plugin.getServer().getScheduler().runTask(plugin, () -> {
+                            boolean ok = plugin.getServer().dispatchCommand(
+                                plugin.getServer().getConsoleSender(), command);
+                            JsonObject result = new JsonObject();
+                            result.addProperty("type", "command_result");
+                            result.addProperty("command", command);
+                            result.addProperty("ok", ok);
+                            sendEvent(result);
+                        });
+                    }
+                }
+                case "broadcast" -> {
+                    String content = msg.has("content") ? msg.get("content").getAsString() : "";
+                    if (!content.isEmpty()) {
+                        plugin.getServer().getScheduler().runTask(plugin, () ->
+                            plugin.getServer().broadcastMessage("§9[Bot]§r " + content)
+                        );
+                    }
+                }
+                case "kick_player" -> {
+                    String playerName = msg.has("playerName") ? msg.get("playerName").getAsString() : "";
+                    String reason = msg.has("reason") ? msg.get("reason").getAsString() : "Kicked by dashboard";
+                    if (!playerName.isEmpty()) {
+                        plugin.getServer().getScheduler().runTask(plugin, () -> {
+                            org.bukkit.entity.Player p = plugin.getServer().getPlayer(playerName);
+                            if (p != null) p.kickPlayer(reason);
+                        });
+                    }
+                }
                 default -> {}
             }
         } catch (Exception e) {

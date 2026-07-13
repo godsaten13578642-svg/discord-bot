@@ -5,7 +5,7 @@ const api  = (path, opts) => fetch(path, opts).then(r => r.json());
 const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const del  = (path) => api(path, { method: 'DELETE' });
 
-const TABS = ['Dashboard','Civilizations','Religions','Teams','Cults','Diplomacy','Economy','Events','Members','Servers','Announcements','Settings'];
+const TABS = ['Dashboard','Civilizations','Religions','Teams','Cults','Diplomacy','Economy','Events','Members','Servers','Minecraft','Announcements','Settings'];
 
 const S = {
   card:    { background: 'white', borderRadius: 10, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,.08)', marginBottom: 16 },
@@ -139,6 +139,9 @@ export default function App() {
   const [form,    setForm]    = useState({});
   const [announcements, setAnnouncements] = useState([]);
   const [ann, setAnn] = useState({ title: '', body: '', channelId: '', scheduledAt: '' });
+  const [mcStatus, setMcStatus] = useState(null);
+  const [mcCmd, setMcCmd] = useState('');
+  const [mcBroadcast, setMcBroadcast] = useState('');
 
   const showToast  = (msg, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3200); };
   const closeModal = () => { setModal(null); setForm({}); };
@@ -146,6 +149,11 @@ export default function App() {
   const loadAnnouncements = useCallback(async () => {
     const anns = await api('/api/announcements').catch(() => []);
     if (Array.isArray(anns)) setAnnouncements(anns.sort((a, b) => b.id - a.id));
+  }, []);
+
+  const loadMcStatus = useCallback(async () => {
+    const s = await api('/api/mc/status').catch(() => null);
+    if (s) setMcStatus(s);
   }, []);
 
   const load = useCallback(async () => {
@@ -161,7 +169,8 @@ export default function App() {
       if (Array.isArray(chs)) setChannels(chs);
     } catch (_) {}
     loadAnnouncements();
-  }, [loadAnnouncements]);
+    loadMcStatus();
+  }, [loadAnnouncements, loadMcStatus]);
 
   useEffect(() => { load(); const t = setInterval(load, 8000); return () => clearInterval(t); }, [load]);
 
@@ -554,6 +563,216 @@ export default function App() {
             {!servers.length && <EmptyState icon="🖥️" text="No servers yet" />}
           </div>
         )}
+
+        {/* Minecraft */}
+        {tab === 'Minecraft' && (() => {
+          const mc = mcStatus || {};
+          const online = mc.online;
+          const players = mc.players || [];
+          const chatLog = [...(mc.chatLog || [])].reverse();
+          const eventLog = [...(mc.eventLog || [])].reverse();
+          const commandLog = [...(mc.commandLog || [])].reverse();
+          const linkedPlayers = players.map(name => {
+            const mcUUID = Object.entries(state.linkedAccounts || {}).find(([, d]) => false)?.[0];
+            const discordId = Object.entries(state.reverseLinks || {}).find(([, u]) => u === name)?.[0];
+            const user = discordId ? state.users?.[discordId] : null;
+            return { name, discordId, user };
+          });
+          const eventIcon = t => ({ player_join: '✅', player_quit: '👋', player_death: '💀', advancement: '🏆', server_start: '🟢', server_stop: '🔴' }[t] || '📋');
+
+          return (
+            <div>
+              {/* Status Banner */}
+              <div style={{ ...S.card, display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 14, height: 14, borderRadius: '50%', background: online ? '#22c55e' : '#ef4444', boxShadow: online ? '0 0 8px #22c55e' : 'none' }} />
+                  <span style={{ fontWeight: 800, fontSize: 18 }}>{online ? 'Online' : 'Offline'}</span>
+                </div>
+                <div style={{ color: '#666', fontSize: 14 }}>
+                  <strong>{players.length}</strong> player{players.length !== 1 ? 's' : ''} online
+                </div>
+                {mc.lastSeen && (
+                  <div style={{ color: '#aaa', fontSize: 13 }}>
+                    Last seen: {new Date(mc.lastSeen).toLocaleString()}
+                  </div>
+                )}
+                <div style={{ marginLeft: 'auto' }}>
+                  <Btn small outline color="#6c757d" onClick={loadMcStatus}>↻ Refresh</Btn>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                {/* Online Players */}
+                <div style={S.card}>
+                  <h3 style={{ margin: '0 0 14px', fontSize: 15 }}>👥 Online Players</h3>
+                  {!players.length && <EmptyState icon="🎮" text={online ? 'No players online' : 'Server not connected'} />}
+                  {players.map(name => {
+                    const discordId = Object.entries(mc.reverseLinks || state.reverseLinks || {}).find(([, u]) => u === name || u?.toLowerCase() === name.toLowerCase())?.[0];
+                    const user = discordId ? (state.users || {})[discordId] : null;
+                    return (
+                      <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #f5f5f5' }}>
+                        <img
+                          src={`https://crafatar.com/avatars/${name}?size=32&overlay`}
+                          alt={name}
+                          style={{ width: 32, height: 32, borderRadius: 4, imageRendering: 'pixelated' }}
+                          onError={e => { e.target.src = 'https://crafatar.com/avatars/Steve?size=32'; }}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14 }}>{name}</div>
+                          {discordId
+                            ? <div style={{ fontSize: 12, color: '#7c3aed' }}>🔗 Discord linked</div>
+                            : <div style={{ fontSize: 12, color: '#aaa' }}>Not linked</div>}
+                        </div>
+                        <Btn small color="#dc3545" outline onClick={async () => {
+                          const r = await post('/api/mc/kick', { playerName: name });
+                          showToast(r.error ? r.error : `Kicked ${name}`, !r.error);
+                          loadMcStatus();
+                        }}>Kick</Btn>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Command Console */}
+                <div style={S.card}>
+                  <h3 style={{ margin: '0 0 14px', fontSize: 15 }}>⌨️ Command Console</h3>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                    <input
+                      value={mcCmd}
+                      onChange={e => setMcCmd(e.target.value)}
+                      onKeyDown={async e => {
+                        if (e.key === 'Enter' && mcCmd.trim()) {
+                          const r = await post('/api/mc/command', { command: mcCmd.trim() });
+                          showToast(r.error ? r.error : '✓ Sent', !r.error);
+                          if (!r.error) { setMcCmd(''); loadMcStatus(); }
+                        }
+                      }}
+                      placeholder="/give Steve diamonds 64"
+                      style={{ flex: 1, padding: '8px 11px', border: '1.5px solid #ddd', borderRadius: 7, fontSize: 13, fontFamily: 'monospace' }}
+                    />
+                    <Btn color="#0d6efd" onClick={async () => {
+                      if (!mcCmd.trim()) return;
+                      const r = await post('/api/mc/command', { command: mcCmd.trim() });
+                      showToast(r.error ? r.error : '✓ Sent', !r.error);
+                      if (!r.error) { setMcCmd(''); loadMcStatus(); }
+                    }}>Run</Btn>
+                  </div>
+                  <div style={{ background: '#111', borderRadius: 7, padding: 10, minHeight: 120, maxHeight: 200, overflowY: 'auto', fontFamily: 'monospace', fontSize: 12 }}>
+                    {!commandLog.length && <div style={{ color: '#555' }}>No commands sent yet…</div>}
+                    {commandLog.map((c, i) => (
+                      <div key={i} style={{ color: c.ok === false ? '#f87171' : c.ok === true ? '#86efac' : '#facc15', marginBottom: 3 }}>
+                        <span style={{ color: '#555' }}>{new Date(c.ts).toLocaleTimeString()} </span>
+                        <span style={{ color: '#60a5fa' }}>{'>'} </span>
+                        {c.command}
+                        {c.ok === true && <span style={{ color: '#86efac' }}> ✓</span>}
+                        {c.ok === false && <span style={{ color: '#f87171' }}> ✗</span>}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#aaa', marginTop: 8 }}>
+                    {online ? '🟢 Plugin connected — commands execute on server' : '🔴 Plugin not connected'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Broadcast */}
+              <div style={{ ...S.card, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap' }}>📢 Broadcast to MC:</span>
+                <input
+                  value={mcBroadcast}
+                  onChange={e => setMcBroadcast(e.target.value)}
+                  onKeyDown={async e => {
+                    if (e.key === 'Enter' && mcBroadcast.trim()) {
+                      const r = await post('/api/mc/broadcast', { content: mcBroadcast.trim() });
+                      showToast(r.error ? r.error : '📢 Broadcast sent!', !r.error);
+                      if (!r.error) setMcBroadcast('');
+                    }
+                  }}
+                  placeholder="Message shown to all players in-game…"
+                  style={{ flex: 1, minWidth: 200, padding: '8px 11px', border: '1.5px solid #ddd', borderRadius: 7, fontSize: 14 }}
+                />
+                <Btn color="#7c3aed" onClick={async () => {
+                  if (!mcBroadcast.trim()) return;
+                  const r = await post('/api/mc/broadcast', { content: mcBroadcast.trim() });
+                  showToast(r.error ? r.error : '📢 Broadcast sent!', !r.error);
+                  if (!r.error) setMcBroadcast('');
+                }}>📢 Broadcast</Btn>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                {/* Chat Log */}
+                <div style={S.card}>
+                  <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>💬 Recent Chat</h3>
+                  {!chatLog.length && <EmptyState icon="💬" text="No chat messages yet" />}
+                  <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+                    {chatLog.map((c, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, padding: '5px 0', borderBottom: '1px solid #f5f5f5', alignItems: 'flex-start' }}>
+                        <img
+                          src={`https://crafatar.com/avatars/${c.playerName}?size=24&overlay`}
+                          alt={c.playerName}
+                          style={{ width: 24, height: 24, borderRadius: 3, imageRendering: 'pixelated', flexShrink: 0, marginTop: 1 }}
+                          onError={e => { e.target.style.display = 'none'; }}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontWeight: 700, fontSize: 13, color: '#7c3aed' }}>{c.playerName} </span>
+                          <span style={{ fontSize: 13, color: '#333', wordBreak: 'break-word' }}>{c.content}</span>
+                          <div style={{ fontSize: 11, color: '#bbb' }}>{new Date(c.ts).toLocaleTimeString()}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Event Log */}
+                <div style={S.card}>
+                  <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>📋 Event Feed</h3>
+                  {!eventLog.length && <EmptyState icon="📋" text="No events yet" />}
+                  <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+                    {eventLog.map((e, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, padding: '5px 0', borderBottom: '1px solid #f5f5f5', alignItems: 'flex-start', fontSize: 13 }}>
+                        <span style={{ fontSize: 16, flexShrink: 0 }}>{eventIcon(e.type)}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ color: '#333', wordBreak: 'break-word' }}>{e.message || `${e.playerName} — ${e.type}`}</div>
+                          <div style={{ fontSize: 11, color: '#bbb' }}>{new Date(e.ts).toLocaleTimeString()}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Linked Accounts */}
+              <div style={S.card}>
+                <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>🔗 Linked Accounts</h3>
+                {!Object.keys(state.reverseLinks || {}).length && <EmptyState icon="🔗" text="No linked accounts — players use /link in-game" />}
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead><tr>
+                    <th style={S.th}>MC Username / UUID</th>
+                    <th style={S.th}>Discord User</th>
+                    <th style={S.th}>Level</th>
+                    <th style={S.th}>Gold</th>
+                    <th style={S.th}>Civilization</th>
+                  </tr></thead>
+                  <tbody>
+                    {Object.entries(state.reverseLinks || {}).map(([discordId, mcUUID]) => {
+                      const user = (state.users || {})[discordId];
+                      const civ = user?.civilization ? (state.civs || []).find(c => c.id == user.civilization)?.name : null;
+                      return (
+                        <tr key={discordId} style={{ borderBottom: '1px solid #f5f5f5' }}>
+                          <td style={{ padding: '8px 12px', fontSize: 13, fontFamily: 'monospace', color: '#555', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{mcUUID}</td>
+                          <td style={{ padding: '8px 12px', fontSize: 13 }}>{user ? `${user.username}` : discordId}</td>
+                          <td style={{ padding: '8px 12px', fontSize: 13 }}>⭐ {user?.level || 1}</td>
+                          <td style={{ padding: '8px 12px', fontSize: 13 }}>💰 {(state.economy || {})[discordId] || 0}</td>
+                          <td style={{ padding: '8px 12px', fontSize: 13 }}>{civ || <span style={{ color: '#bbb' }}>—</span>}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Announcements */}
         {tab === 'Announcements' && (

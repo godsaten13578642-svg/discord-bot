@@ -32,7 +32,7 @@ const data = {
   linkedAccounts: _saved.linkedAccounts || {},
   reverseLinks:   _saved.reverseLinks   || {},
   linkCodes:      _saved.linkCodes      || {},
-  mcServer:       _saved.mcServer       || { players: [], online: false, lastSeen: null },
+  mcServer:       { players: [], online: false, lastSeen: null, chatLog: [], eventLog: [], commandLog: [], ...(_saved.mcServer || {}) },
 };
 
 let counters = _saved.counters || { civ: 1, religion: 1, team: 1, cult: 1, alliance: 1, event: 1, poll: 1 };
@@ -743,10 +743,17 @@ const mcAuth = (req, res, next) => {
   next();
 };
 
+const MC_LOG_MAX = 100;
+const pushMcLog = (arr, entry) => { arr.push(entry); if (arr.length > MC_LOG_MAX) arr.shift(); };
+
+app.get('/api/mc/status', (_, res) => res.json(data.mcServer));
+
 app.post('/api/mc/chat', mcAuth, (req, res) => {
   const { playerName, content, mcPrefix = '[MC]' } = req.body;
   data.mcServer.online = true;
   data.mcServer.lastSeen = new Date();
+  pushMcLog(data.mcServer.chatLog, { playerName, content, ts: new Date().toISOString() });
+  saveDb();
   if (features.bridgeEnabled && features.bridgeChannelId && global.botClient) {
     const ch = global.botClient.channels.cache.get(features.bridgeChannelId);
     if (ch) ch.send(`**${mcPrefix} ${playerName}:** ${content}`).catch(() => {});
@@ -755,9 +762,11 @@ app.post('/api/mc/chat', mcAuth, (req, res) => {
 });
 
 app.post('/api/mc/event', mcAuth, (req, res) => {
-  const { type, playerName, message, metadata } = req.body;
+  const { type, playerName, message } = req.body;
   data.mcServer.online = true;
   data.mcServer.lastSeen = new Date();
+  pushMcLog(data.mcServer.eventLog, { type, playerName, message, ts: new Date().toISOString() });
+  saveDb();
   if (features.mcEventsEnabled && features.mcEventsChannelId && global.botClient) {
     const ch = global.botClient.channels.cache.get(features.mcEventsChannelId);
     if (ch && message) ch.send(message).catch(() => {});
@@ -771,6 +780,35 @@ app.post('/api/mc/players', mcAuth, (req, res) => {
   data.mcServer.online = true;
   data.mcServer.lastSeen = new Date();
   saveDb();
+  res.json({ success: true });
+});
+
+app.post('/api/mc/command', (req, res) => {
+  const { command } = req.body;
+  if (!command) return res.status(400).json({ error: 'command required' });
+  if (global.mcWsClients.size === 0) return res.status(503).json({ error: 'Minecraft server not connected' });
+  const msg = JSON.stringify({ type: 'run_command', command });
+  global.mcWsClients.forEach(ws => { try { ws.send(msg); } catch {} });
+  pushMcLog(data.mcServer.commandLog, { command, ts: new Date().toISOString(), status: 'sent' });
+  saveDb();
+  res.json({ success: true });
+});
+
+app.post('/api/mc/broadcast', (req, res) => {
+  const { content } = req.body;
+  if (!content) return res.status(400).json({ error: 'content required' });
+  if (global.mcWsClients.size === 0) return res.status(503).json({ error: 'Minecraft server not connected' });
+  const msg = JSON.stringify({ type: 'broadcast', content });
+  global.mcWsClients.forEach(ws => { try { ws.send(msg); } catch {} });
+  res.json({ success: true });
+});
+
+app.post('/api/mc/kick', (req, res) => {
+  const { playerName, reason = 'Kicked by dashboard' } = req.body;
+  if (!playerName) return res.status(400).json({ error: 'playerName required' });
+  if (global.mcWsClients.size === 0) return res.status(503).json({ error: 'Minecraft server not connected' });
+  const msg = JSON.stringify({ type: 'run_command', command: `kick ${playerName} ${reason}` });
+  global.mcWsClients.forEach(ws => { try { ws.send(msg); } catch {} });
   res.json({ success: true });
 });
 
@@ -836,14 +874,33 @@ wss.on('connection', (ws, req) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch { return; }
 
-    if (msg.type === 'mc_chat' && features.bridgeEnabled && features.bridgeChannelId && global.botClient) {
-      const ch = global.botClient.channels.cache.get(features.bridgeChannelId);
-      if (ch) ch.send(`🎮 **[MC] ${msg.playerName}:** ${msg.content}`).catch(() => {});
-    } else if (msg.type === 'mc_event' && features.mcEventsEnabled && features.mcEventsChannelId && global.botClient) {
-      const ch = global.botClient.channels.cache.get(features.mcEventsChannelId);
-      if (ch && msg.message) ch.send(msg.message).catch(() => {});
+    if (msg.type === 'identify') {
+      // Plugin identified itself — nothing extra needed
+    } else if (msg.type === 'pong') {
+      data.mcServer.online = true;
+      data.mcServer.lastSeen = new Date();
+      if (typeof msg.playerCount === 'number') data.mcServer.playerCount = msg.playerCount;
+    } else if (msg.type === 'mc_chat') {
+      pushMcLog(data.mcServer.chatLog, { playerName: msg.playerName, content: msg.content, ts: new Date().toISOString() });
+      saveDb();
+      if (features.bridgeEnabled && features.bridgeChannelId && global.botClient) {
+        const ch = global.botClient.channels.cache.get(features.bridgeChannelId);
+        if (ch) ch.send(`🎮 **[MC] ${msg.playerName}:** ${msg.content}`).catch(() => {});
+      }
+    } else if (msg.type === 'mc_event') {
+      pushMcLog(data.mcServer.eventLog, { type: msg.eventType, playerName: msg.playerName, message: msg.message, ts: new Date().toISOString() });
+      saveDb();
+      if (features.mcEventsEnabled && features.mcEventsChannelId && global.botClient) {
+        const ch = global.botClient.channels.cache.get(features.mcEventsChannelId);
+        if (ch && msg.message) ch.send(msg.message).catch(() => {});
+      }
     } else if (msg.type === 'mc_players') {
       data.mcServer.players = msg.players || [];
+      saveDb();
+    } else if (msg.type === 'command_result') {
+      // Update last command log entry with result
+      const last = data.mcServer.commandLog[data.mcServer.commandLog.length - 1];
+      if (last && last.command === msg.command) last.ok = msg.ok;
       saveDb();
     }
   });
