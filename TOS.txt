@@ -1,0 +1,121 @@
+# Memebot Terms of Service
+
+**Last Updated:** July 15, 2026
+
+## 1. Agreement
+
+By inviting, accessing, or using Memebot ("the Bot"), you agree to these Terms of Service. If you do not agree with these Terms, you must discontinue use of the Bot and remove it from your Discord server.
+
+## 2. About Memebot
+
+Memebot is a Discord bot designed to assist with server management, organization, and community experiences. Features may include, but are not limited to:
+
+* Saving and managing server-specific commands and data.
+* Organizing communities such as SMPs, civilizations, religions, cults, kingdoms, factions, teams, and similar groups.
+* Administrative and utility tools.
+* Dashboard integration.
+* Plugin integration.
+* Additional features that may be enabled or disabled by the developers or by authorized server administrators.
+
+Not every feature is publicly documented or available at all times. Certain features may be experimental, hidden, restricted, or released gradually.
+
+## 3. Future Features
+
+Memebot is an actively developed project. Future updates may include features such as:
+
+* Multiple save profiles.
+* User account sign-in.
+* A web dashboard.
+* A Minecraft plugin that integrates with Memebot.
+* Additional integrations, automation tools, and server management features.
+
+These features may be introduced, modified, delayed, or removed at the developers' discretion.
+
+## 4. Acceptable Use
+
+You agree not to:
+
+* Use Memebot for unlawful purposes.
+* Attempt to exploit bugs or vulnerabilities.
+* Reverse engineer, copy, or abuse the Bot.
+* Intentionally interfere with the Bot's operation.
+* Use the Bot to violate Discord's Terms of Service or Community Guidelines.
+* Circumvent feature restrictions or security mechanisms.
+
+## 5. Server Responsibility
+
+Server owners and administrators are responsible for how Memebot is configured and used within their Discord servers.
+
+The developers are not responsible for actions taken by server staff using the Bot.
+
+## 6. Data Storage
+
+To provide its services, Memebot may store information necessary for its operation. This may include, but is not limited to:
+
+* Discord Server IDs
+* Discord Channel IDs
+* Discord Role IDs
+* Discord User IDs
+* Saved commands
+* Server configuration
+* Feature settings
+* Dashboard configuration
+* Plugin synchronization data
+* Other information required for Bot functionality
+
+The types of stored data may change as new features are added.
+
+## 7. Dashboard and Linked Services
+
+Some features may require the use of a web dashboard or linked applications.
+
+Additional authentication methods, including account sign-in, may be introduced in future updates.
+
+By using these services, you agree to any additional terms or policies that may apply.
+
+## 8. Experimental and Hidden Features
+
+Certain functionality may be hidden, limited, experimental, invite-only, or available only after being enabled by the developers or authorized server administrators.
+
+These features are provided without any guarantee of continued availability.
+
+## 9. Updates and Changes
+
+Memebot is continuously evolving.
+
+Features, commands, APIs, integrations, permissions, and functionality may be added, modified, replaced, or removed at any time without prior notice.
+
+## 10. Availability
+
+Memebot is provided on an "as is" and "as available" basis.
+
+We do not guarantee uninterrupted uptime, availability, compatibility with all Discord updates, or that every feature will always operate without errors.
+
+Maintenance, outages, and unexpected downtime may occur.
+
+## 11. Suspension and Termination
+
+We reserve the right to temporarily or permanently deny access to Memebot to any user or server that:
+
+* Violates these Terms.
+* Abuses or exploits the Bot.
+* Attempts to compromise the security or stability of the Bot.
+* Uses Memebot in a manner that negatively impacts other users or the service.
+
+## 12. Limitation of Liability
+
+To the fullest extent permitted by applicable law, the developers of Memebot shall not be liable for any damages, losses, or claims arising from the use of, inability to use, or interruption of the Bot or any related services.
+
+## 13. Changes to These Terms
+
+These Terms of Service may be updated at any time.
+
+Continued use of Memebot after updated Terms become effective constitutes acceptance of the revised Terms.
+
+## 14. Contact
+
+Questions regarding these Terms or Memebot may be directed through the project's official support channels.
+
+---
+
+By inviting or using Memebot, you acknowledge that you have read, understood, and agree to these Terms of Service.
