@@ -24,7 +24,7 @@ const router = express.Router();
 // Public endpoints
 
 // Sign up (first signup becomes master account)
-router.post('/auth/signup', (req, res) => {
+router.post('/api/auth/signup', (req, res) => {
   const { email, password, username } = req.body;
 
   if (!email || !password || !username) {
@@ -56,7 +56,7 @@ router.post('/auth/signup', (req, res) => {
 });
 
 // Login
-router.post('/auth/login', (req, res) => {
+router.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -82,7 +82,7 @@ router.post('/auth/login', (req, res) => {
 });
 
 // Get current user info (requires auth)
-router.get('/auth/me', authMiddleware, (req, res) => {
+router.get('/api/auth/me', authMiddleware, (req, res) => {
   const account = getAccountById(req.user.userId);
 
   if (!account) {
@@ -104,7 +104,7 @@ router.get('/auth/me', authMiddleware, (req, res) => {
 // Master-only endpoints
 
 // Get all accounts
-router.get('/auth/accounts', authMiddleware, requireRole('master'), (req, res) => {
+router.get('/api/auth/accounts', authMiddleware, requireRole('master'), (req, res) => {
   const accounts = getAllAccounts().map(acc => ({
     id: acc.id,
     email: acc.email,
@@ -120,7 +120,7 @@ router.get('/auth/accounts', authMiddleware, requireRole('master'), (req, res) =
 });
 
 // Get master account info
-router.get('/auth/master', authMiddleware, requireRole('master'), (req, res) => {
+router.get('/api/auth/master', authMiddleware, requireRole('master'), (req, res) => {
   const master = getMasterAccount();
 
   if (!master) {
@@ -138,7 +138,7 @@ router.get('/auth/master', authMiddleware, requireRole('master'), (req, res) => 
 });
 
 // Reset master account
-router.post('/auth/reset-master', authMiddleware, requireRole('master'), (req, res) => {
+router.post('/api/auth/reset-master', authMiddleware, requireRole('master'), (req, res) => {
   const result = resetMasterAccount();
 
   if (result.error) {
@@ -152,7 +152,7 @@ router.post('/auth/reset-master', authMiddleware, requireRole('master'), (req, r
 });
 
 // Delete an account (master only)
-router.delete('/auth/accounts/:userId', authMiddleware, requireRole('master'), (req, res) => {
+router.delete('/api/auth/accounts/:userId', authMiddleware, requireRole('master'), (req, res) => {
   const { userId } = req.params;
 
   const result = deleteAccount(userId);
@@ -165,7 +165,7 @@ router.delete('/auth/accounts/:userId', authMiddleware, requireRole('master'), (
 });
 
 // Promote player to server owner
-router.post('/auth/promote-owner', authMiddleware, (req, res) => {
+router.post('/api/auth/promote-owner', authMiddleware, (req, res) => {
   const { userId, serverId } = req.body;
 
   // Check if requester is master or owner of that server
@@ -187,7 +187,7 @@ router.post('/auth/promote-owner', authMiddleware, (req, res) => {
 });
 
 // Link Discord ID to account
-router.post('/auth/link-discord', authMiddleware, (req, res) => {
+router.post('/api/auth/link-discord', authMiddleware, (req, res) => {
   const { discordId } = req.body;
 
   if (!discordId) {
