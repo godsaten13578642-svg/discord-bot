@@ -140,6 +140,9 @@ export default function App() {
   const [userId,    setUserId]    = useState(null);
   const [username,  setUsername]  = useState(null);
 
+  // Server selector
+  const [selectedServerId, setSelectedServerId] = useState(null);
+
   // Dashboard state
   const [tab,     setTab]     = useState('Dashboard');
   const [state,   setState]   = useState({ stats: null, bot: null, civs: [], users: [], servers: [], features: null, religions: [], teams: [], cults: [], rebels: [], alliances: [], economy: [], events: [], bounties: [] });
@@ -155,6 +158,7 @@ export default function App() {
   const [mcBroadcast, setMcBroadcast] = useState('');
   const [accounts, setAccounts] = useState([]);
   const [promoteForm, setPromoteForm] = useState({ userId: '', serverId: '' });
+  const [addServerForm, setAddServerForm] = useState({ serverId: '', serverName: '' });
 
   // Check saved auth on mount
   useEffect(() => {
@@ -206,20 +210,27 @@ export default function App() {
 
   const load = useCallback(async () => {
     try {
+      const featureUrl = selectedServerId ? `/api/features?serverId=${selectedServerId}` : '/api/features';
       const [stats, bot, civs, users, servers, features, religions, teams, cults, rebels, alliances, economy, events, bounties] = await Promise.all([
         api('/api/stats'), api('/api/bot/status'), api('/api/civilizations'), api('/api/users'),
-        api('/api/servers'), api('/api/features'), api('/api/religions'), api('/api/teams'),
+        api('/api/servers'), api(featureUrl), api('/api/religions'), api('/api/teams'),
         api('/api/cults'), api('/api/rebels'), api('/api/alliances'), api('/api/economy'),
         api('/api/events'), api('/api/bounties'),
       ]);
-      setState({ stats, bot, civs, users, servers, features, religions, teams, cults, rebels, alliances, economy, events, bounties });
+      setState(s => {
+        // Auto-select first server if none selected yet
+        if (!selectedServerId && servers && servers.length > 0) {
+          setSelectedServerId(servers[0].serverId);
+        }
+        return { stats, bot, civs, users, servers, features, religions, teams, cults, rebels, alliances, economy, events, bounties };
+      });
       const chs = await api('/api/channels').catch(() => []);
       if (Array.isArray(chs)) setChannels(chs);
     } catch (_) {}
     loadAnnouncements();
     loadMcStatus();
     loadAccounts();
-  }, [loadAnnouncements, loadMcStatus, loadAccounts]);
+  }, [loadAnnouncements, loadMcStatus, loadAccounts, selectedServerId]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -238,8 +249,9 @@ export default function App() {
 
   const setFeature = async (key, val) => {
     setState(s => ({ ...s, features: { ...s.features, [key]: val } }));
-    await post('/api/features', { [key]: val });
-    showToast(`Saved!`);
+    const qs = selectedServerId ? `?serverId=${selectedServerId}` : '';
+    await post(`/api/features${qs}`, { [key]: val });
+    showToast('Saved!');
   };
   const toggleFeature = (key, val) => setFeature(key, val);
 
@@ -301,9 +313,24 @@ export default function App() {
       {/* Header */}
       <div style={{ background: 'white', borderBottom: '1px solid #eee', padding: '0 24px' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0 0', flexWrap: 'wrap', gap: 10 }}>
             <div style={{ fontWeight: 800, fontSize: 20 }}>🏛️ CivBot Dashboard</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              {/* Server selector */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 12, color: '#999', fontWeight: 700 }}>SERVER</span>
+                <select
+                  value={selectedServerId || ''}
+                  onChange={e => setSelectedServerId(e.target.value || null)}
+                  style={{ padding: '5px 10px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: 13, background: 'white', cursor: 'pointer', maxWidth: 180 }}
+                >
+                  {servers && servers.length > 0
+                    ? servers.map(s => <option key={s.serverId} value={s.serverId}>{s.serverName}</option>)
+                    : <option value="">No servers yet</option>
+                  }
+                </select>
+              </div>
+              <span style={{ color: '#ddd' }}>|</span>
               <span style={{ width: 10, height: 10, borderRadius: '50%', background: bot?.online ? '#198754' : '#dc3545', display: 'inline-block' }} />
               <span style={{ fontSize: 13, color: '#666' }}>{bot?.online ? `${bot.tag} · ${bot.ping}ms` : 'Bot offline'}</span>
               <span style={{ fontSize: 13, color: '#444', fontWeight: 600 }}>
@@ -610,22 +637,71 @@ export default function App() {
 
         {/* Servers */}
         {tab === 'Servers' && (
-          <div style={S.card}>
-            <h3 style={{ margin: '0 0 14px' }}>🖥️ Discord Servers ({servers.length})</h3>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr>{['Server ID','Name','Setup At','Actions'].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
-              <tbody>
-                {servers.map(s => (
-                  <tr key={s.serverId}>
-                    <td style={S.td}><code style={{ fontSize: 11 }}>{s.serverId}</code></td>
-                    <td style={S.td}><strong>{s.serverName}</strong></td>
-                    <td style={S.td} style={{ fontSize: 12 }}>{new Date(s.setupAt).toLocaleDateString()}</td>
-                    <td style={S.td}><Btn small color="#dc3545" outline onClick={() => doDelete(`Remove ${s.serverName}?`, () => del(`/api/servers/${s.serverId}`))}>Remove</Btn></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {!servers.length && <EmptyState icon="🖥️" text="No servers yet" />}
+          <div>
+            {/* Add Server */}
+            <div style={{ ...S.card, marginBottom: 16 }}>
+              <h3 style={{ margin: '0 0 14px' }}>➕ Add Server</h3>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <div style={S.label}>Server Name</div>
+                  <input
+                    type="text" placeholder="My Discord Server"
+                    value={addServerForm.serverName}
+                    onChange={e => setAddServerForm(f => ({ ...f, serverName: e.target.value }))}
+                    style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={S.label}>Discord Server ID</div>
+                  <input
+                    type="text" placeholder="e.g. 123456789012345678"
+                    value={addServerForm.serverId}
+                    onChange={e => setAddServerForm(f => ({ ...f, serverId: e.target.value }))}
+                    style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                  />
+                </div>
+                <Btn
+                  disabled={!addServerForm.serverId.trim() || !addServerForm.serverName.trim()}
+                  onClick={async () => {
+                    const r = await post('/api/servers/add', addServerForm);
+                    if (r.error) { showToast(r.error, false); return; }
+                    showToast('Server added!');
+                    setAddServerForm({ serverId: '', serverName: '' });
+                    load();
+                  }}
+                >Add Server</Btn>
+              </div>
+              <div style={{ fontSize: 12, color: '#aaa', marginTop: 10 }}>
+                💡 The Discord Server ID can be found by right-clicking your server name in Discord (enable Developer Mode in settings first).
+              </div>
+            </div>
+
+            {/* Servers list */}
+            <div style={S.card}>
+              <h3 style={{ margin: '0 0 14px' }}>🖥️ Discord Servers ({servers.length})</h3>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr>{['Name','Server ID','Added','Actions'].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {servers.map(s => (
+                    <tr key={s.serverId} style={{ background: s.serverId === selectedServerId ? '#f0f7ff' : 'transparent' }}>
+                      <td style={S.td}>
+                        <strong>{s.serverName}</strong>
+                        {s.serverId === selectedServerId && <Badge color="#0d6efd" textColor="white" style={{ marginLeft: 6 }}>selected</Badge>}
+                      </td>
+                      <td style={S.td}><code style={{ fontSize: 11, color: '#666' }}>{s.serverId}</code></td>
+                      <td style={{ ...S.td, fontSize: 12, color: '#999' }}>{new Date(s.setupAt).toLocaleDateString()}</td>
+                      <td style={S.td}>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <Btn small outline onClick={() => setSelectedServerId(s.serverId)}>Select</Btn>
+                          <Btn small color="#dc3545" outline onClick={() => doDelete(`Remove ${s.serverName}?`, () => del(`/api/servers/${s.serverId}`))}>Remove</Btn>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!servers.length && <EmptyState icon="🖥️" text="No servers yet — add one above" />}
+            </div>
           </div>
         )}
 

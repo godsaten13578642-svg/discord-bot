@@ -41,61 +41,82 @@ const data = {
 
 let counters = _saved.counters || { civ: 1, religion: 1, team: 1, cult: 1, alliance: 1, event: 1, poll: 1 };
 
-const features = Object.assign({
-  // Core
-  commandsEnabled:       true,
-  autoRegisterMembers:   true,
-  // XP & Levels
-  xpEnabled:             true,
-  xpPerMessage:          10,
-  levelupEnabled:        true,
-  levelupChannelId:      '',
-  // Welcome
-  welcomeMessages:       true,
-  welcomeChannelId:      '',
-  // Economy
-  economyEnabled:        true,
-  dailyRewardAmount:     100,
-  // Groups
-  civilizationsEnabled:  true,
-  religionsEnabled:      true,
-  teamsEnabled:          true,
-  cultsEnabled:          true,
-  rebelsEnabled:         true,
-  // Diplomacy
-  warsEnabled:           true,
+// ── Per-Server Features ────────────────────────────────────────────────────────
+const DEFAULT_FEATURES = {
+  commandsEnabled:              true,
+  autoRegisterMembers:          true,
+  xpEnabled:                    true,
+  xpPerMessage:                 10,
+  levelupEnabled:               true,
+  levelupChannelId:             '',
+  welcomeMessages:              true,
+  welcomeChannelId:             '',
+  economyEnabled:               true,
+  dailyRewardAmount:            100,
+  civilizationsEnabled:         true,
+  religionsEnabled:             true,
+  teamsEnabled:                 true,
+  cultsEnabled:                 true,
+  rebelsEnabled:                true,
+  warsEnabled:                  true,
   diplomacyAnnouncementsEnabled: true,
-  diplomacyChannelId:    '',
-  // Events
-  eventsEnabled:         true,
-  eventsChannelId:       '',
-  // Bounties
-  bountyEnabled:         true,
-  bountyChannelId:       '',
-  // Polls
-  pollsEnabled:          true,
-  pollsChannelId:        '',
-  // Announcements
-  announcementChannelId: '',
-  // Giveaways
-  giveawaysEnabled:      true,
-  giveawayChannelId:     '',
-  // Fun commands
-  funCommandsEnabled:    true,
-  // Minecraft bridge
-  bridgeEnabled:         true,
-  bridgeChannelId:       '',
-  mcApiKey:              'change-me-to-something-secret',
-  mcEventsEnabled:       true,
-  mcEventsChannelId:     '',
-}, _saved.features || {});
+  diplomacyChannelId:           '',
+  eventsEnabled:                true,
+  eventsChannelId:              '',
+  bountyEnabled:                true,
+  bountyChannelId:              '',
+  pollsEnabled:                 true,
+  pollsChannelId:               '',
+  announcementChannelId:        '',
+  giveawaysEnabled:             true,
+  giveawayChannelId:            '',
+  funCommandsEnabled:           true,
+  bridgeEnabled:                true,
+  bridgeChannelId:              '',
+  mcApiKey:                     'change-me-to-something-secret',
+  mcEventsEnabled:              true,
+  mcEventsChannelId:            '',
+};
+
+// Per-server feature overrides — keyed by serverId
+data.serverFeatures = _saved.serverFeatures || {};
+
+// Migrate old flat features blob into _global if present
+if (_saved.features && Object.keys(_saved.features).length > 0 && !data.serverFeatures._global) {
+  data.serverFeatures._global = _saved.features;
+}
+
+function getServerFeatures(serverId) {
+  const key = serverId || '_global';
+  return Object.assign({}, DEFAULT_FEATURES, data.serverFeatures[key] || {});
+}
+
+function setServerFeature(serverId, updates) {
+  const key = serverId || '_global';
+  if (!data.serverFeatures[key]) data.serverFeatures[key] = {};
+  Object.assign(data.serverFeatures[key], updates);
+}
+
+// Backward-compat proxy so existing bot handlers (features.xpEnabled etc.) keep working.
+// Reads from the first registered server, falls back to _global defaults.
+const features = new Proxy({}, {
+  get(_, key) {
+    const sid = Object.keys(data.servers)[0] || '_global';
+    return getServerFeatures(sid)[key];
+  },
+  set(_, key, val) {
+    const sid = Object.keys(data.servers)[0] || '_global';
+    setServerFeature(sid, { [key]: val });
+    return true;
+  }
+});
 
 // ── Save ───────────────────────────────────────────────────────────────────────
 let _saveTimer = null;
 function saveDb() {
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => {
-    try { fs.writeFileSync(DB_FILE, JSON.stringify({ ...data, counters, features }, null, 2)); }
+    try { fs.writeFileSync(DB_FILE, JSON.stringify({ ...data, counters }, null, 2)); }
     catch (e) { console.error('DB save error:', e.message); }
   }, 1500);
 }
@@ -150,12 +171,17 @@ app.get('/api/stats', (_, res) => res.json({
   botOnline:      !!global.botClient?.isReady(),
 }));
 
-// ── Features ───────────────────────────────────────────────────────────────────
-app.get('/api/features', (_, res) => res.json(features));
+// ── Features (per-server) ──────────────────────────────────────────────────────
+app.get('/api/features', (req, res) => {
+  const { serverId } = req.query;
+  res.json(getServerFeatures(serverId));
+});
 app.post('/api/features', (req, res) => {
-  Object.assign(features, req.body);
+  const { serverId } = req.query;
+  const { serverId: _ignore, ...updates } = req.body;
+  setServerFeature(serverId, updates);
   saveDb();
-  res.json({ success: true, features });
+  res.json({ success: true, features: getServerFeatures(serverId) });
 });
 
 // ── Discord Channels (for dashboard dropdowns) ─────────────────────────────────
@@ -165,7 +191,7 @@ app.get('/api/channels', (_, res) => {
   global.botClient.channels.cache.forEach(ch => {
     if (ch.type === 0) { // GUILD_TEXT
       const guild = global.botClient.guilds.cache.get(ch.guildId);
-      channels.push({ id: ch.id, name: `#${ch.name}`, guild: guild?.name || 'Unknown' });
+      channels.push({ id: ch.id, name: `#${ch.name}`, guild: guild?.name || 'Unknown', guildId: ch.guildId });
     }
   });
   channels.sort((a, b) => a.name.localeCompare(b.name));
@@ -727,9 +753,22 @@ app.delete('/api/announcements/:id', (req, res) => {
 
 // ── Servers ────────────────────────────────────────────────────────────────────
 app.get('/api/servers', (_, res) => res.json(Object.values(data.servers)));
+
+// Manual server add from dashboard
+app.post('/api/servers/add', (req, res) => {
+  const { serverId, serverName } = req.body;
+  if (!serverId || !serverName) return res.status(400).json({ error: 'serverId and serverName required' });
+  if (data.servers[serverId]) return res.status(400).json({ error: 'Server already exists' });
+  data.servers[serverId] = { serverId, serverName, setupAt: new Date() };
+  if (!data.serverFeatures[serverId]) data.serverFeatures[serverId] = {};
+  saveDb();
+  res.json({ success: true });
+});
+
 app.post('/api/servers/setup', (req, res) => {
   const { serverId, serverName } = req.body;
   data.servers[serverId] = { serverId, serverName, setupAt: new Date() };
+  if (!data.serverFeatures[serverId]) data.serverFeatures[serverId] = {};
   saveDb();
   res.json({ success: true });
 });
