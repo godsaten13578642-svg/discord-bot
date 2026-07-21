@@ -1,9 +1,9 @@
 run = "npm start"
 entrypoint = "backend/src/index.js"
-modules = ["nodejs-20", "java-graalvm22.3"]
+modules = ["nodejs-20", "java-graalvm22.3", "web"]
 
 [nix]
-channel = "stable-22_11"
+channel = "stable-25_05"
 packages = ["maven"]
 
 [[ports]]
