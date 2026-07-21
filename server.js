@@ -7,6 +7,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ── Accounts & Authentication ──────────────────────────────────────────────────
+const authRouter = require('./auth-endpoints');
+app.use(authRouter);
+
 // ── Persistent JSON Database ───────────────────────────────────────────────────
 const DB_FILE = './db.json';
 let _saved = {};

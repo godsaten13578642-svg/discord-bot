@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
+import LoginPage from './LoginPage';
 
-const api  = (path, opts) => fetch(path, opts).then(r => r.json());
-const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-const del  = (path) => api(path, { method: 'DELETE' });
+const getToken = () => localStorage.getItem('token') || '';
+const authHeaders = () => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` });
 
-const TABS = ['Dashboard','Civilizations','Religions','Teams','Cults','Diplomacy','Economy','Events','Members','Servers','Minecraft','Announcements','Settings'];
+const api  = (path, opts) => fetch(path, { headers: { 'Authorization': `Bearer ${getToken()}` }, ...opts }).then(r => r.json());
+const post = (path, body) => fetch(path, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) }).then(r => r.json());
+const del  = (path) => fetch(path, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getToken()}` } }).then(r => r.json());
+
+const TABS = ['Dashboard','Civilizations','Religions','Teams','Cults','Diplomacy','Economy','Events','Members','Servers','Minecraft','Announcements','Settings','Accounts'];
 
 const S = {
   card:    { background: 'white', borderRadius: 10, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,.08)', marginBottom: 16 },
@@ -130,6 +134,13 @@ function SettingsGroup({ title, icon, children }) {
 }
 
 export default function App() {
+  // Auth state
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userRole,  setUserRole]  = useState(null);
+  const [userId,    setUserId]    = useState(null);
+  const [username,  setUsername]  = useState(null);
+
+  // Dashboard state
   const [tab,     setTab]     = useState('Dashboard');
   const [state,   setState]   = useState({ stats: null, bot: null, civs: [], users: [], servers: [], features: null, religions: [], teams: [], cults: [], rebels: [], alliances: [], economy: [], events: [], bounties: [] });
   const [channels, setChannels] = useState([]);
@@ -142,6 +153,37 @@ export default function App() {
   const [mcStatus, setMcStatus] = useState(null);
   const [mcCmd, setMcCmd] = useState('');
   const [mcBroadcast, setMcBroadcast] = useState('');
+  const [accounts, setAccounts] = useState([]);
+  const [promoteForm, setPromoteForm] = useState({ userId: '', serverId: '' });
+
+  // Check saved auth on mount
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const role  = localStorage.getItem('role');
+    const id    = localStorage.getItem('userId');
+    const name  = localStorage.getItem('username');
+    if (token && role && id && name) {
+      setIsAuthenticated(true);
+      setUserRole(role);
+      setUserId(id);
+      setUsername(name);
+    }
+  }, []);
+
+  const handleLogin = (data) => {
+    setIsAuthenticated(true);
+    setUserRole(data.role);
+    setUserId(data.userId);
+    setUsername(data.username);
+  };
+
+  const handleLogout = () => {
+    ['token','userId','role','username'].forEach(k => localStorage.removeItem(k));
+    setIsAuthenticated(false);
+    setUserRole(null);
+    setUserId(null);
+    setUsername(null);
+  };
 
   const showToast  = (msg, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3200); };
   const closeModal = () => { setModal(null); setForm({}); };
@@ -150,6 +192,12 @@ export default function App() {
     const anns = await api('/api/announcements').catch(() => []);
     if (Array.isArray(anns)) setAnnouncements(anns.sort((a, b) => b.id - a.id));
   }, []);
+
+  const loadAccounts = useCallback(async () => {
+    if (userRole !== 'master') return;
+    const accs = await api('/api/auth/accounts').catch(() => []);
+    if (Array.isArray(accs)) setAccounts(accs);
+  }, [userRole]);
 
   const loadMcStatus = useCallback(async () => {
     const s = await api('/api/mc/status').catch(() => null);
@@ -170,9 +218,20 @@ export default function App() {
     } catch (_) {}
     loadAnnouncements();
     loadMcStatus();
-  }, [loadAnnouncements, loadMcStatus]);
+    loadAccounts();
+  }, [loadAnnouncements, loadMcStatus, loadAccounts]);
 
-  useEffect(() => { load(); const t = setInterval(load, 8000); return () => clearInterval(t); }, [load]);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    load();
+    const t = setInterval(load, 8000);
+    return () => clearInterval(t);
+  }, [load, isAuthenticated]);
+
+  // Show login page if not authenticated
+  if (!isAuthenticated) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
 
   const doDelete  = (msg, fn) => setConfirm({ msg, fn });
   const runConfirm = async () => { await confirm.fn(); setConfirm(null); load(); };
@@ -244,9 +303,15 @@ export default function App() {
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0 0' }}>
             <div style={{ fontWeight: 800, fontSize: 20 }}>🏛️ CivBot Dashboard</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ width: 10, height: 10, borderRadius: '50%', background: bot?.online ? '#198754' : '#dc3545', display: 'inline-block' }} />
               <span style={{ fontSize: 13, color: '#666' }}>{bot?.online ? `${bot.tag} · ${bot.ping}ms` : 'Bot offline'}</span>
+              <span style={{ fontSize: 13, color: '#444', fontWeight: 600 }}>
+                👤 {username}
+                {userRole === 'master' && <Badge color="#ffd700" textColor="#333"> 👑 Master</Badge>}
+                {userRole === 'owner'  && <Badge color="#87ceeb" textColor="#1a1a1a"> 🏢 Owner</Badge>}
+              </span>
+              <Btn small color="#dc3545" outline onClick={handleLogout}>Logout</Btn>
             </div>
           </div>
           <div style={{ display: 'flex', overflowX: 'auto' }}>
@@ -987,6 +1052,113 @@ export default function App() {
               </div>
             </SettingsGroup>
 
+          </div>
+        )}
+
+        {/* Accounts Tab — master only */}
+        {tab === 'Accounts' && (
+          <div>
+            {userRole !== 'master' ? (
+              <div style={S.card}><EmptyState icon="🔒" text="Only the master account can manage accounts." /></div>
+            ) : (
+              <>
+                {/* Stats row */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(160px,1fr))', gap: 14, marginBottom: 20 }}>
+                  {[
+                    ['👑 Master', accounts.filter(a => a.role === 'master').length],
+                    ['🏢 Owners', accounts.filter(a => a.role === 'owner').length],
+                    ['👤 Players', accounts.filter(a => a.role === 'player').length],
+                    ['📋 Total', accounts.length],
+                  ].map(([label, val]) => (
+                    <div key={label} style={{ ...S.card, marginBottom: 0, textAlign: 'center' }}>
+                      <div style={{ fontSize: 26, fontWeight: 800, color: '#0d6efd' }}>{val}</div>
+                      <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Promote to Owner */}
+                <div style={{ ...S.card, marginBottom: 16 }}>
+                  <h3 style={{ margin: '0 0 14px' }}>🏢 Promote Player to Server Owner</h3>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <div style={{ flex: 1, minWidth: 180 }}>
+                      <div style={S.label}>User ID</div>
+                      <select
+                        value={promoteForm.userId}
+                        onChange={e => setPromoteForm(f => ({ ...f, userId: e.target.value }))}
+                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: 13 }}
+                      >
+                        <option value="">— Select a player —</option>
+                        {accounts.filter(a => a.role === 'player').map(a => (
+                          <option key={a.id} value={a.id}>{a.username} ({a.email})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 180 }}>
+                      <div style={S.label}>Server ID</div>
+                      <input
+                        type="text"
+                        placeholder="Discord server ID"
+                        value={promoteForm.serverId}
+                        onChange={e => setPromoteForm(f => ({ ...f, serverId: e.target.value }))}
+                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <Btn
+                      disabled={!promoteForm.userId || !promoteForm.serverId}
+                      onClick={async () => {
+                        const r = await post('/api/auth/promote-owner', promoteForm);
+                        if (r.error) { showToast(r.error, false); return; }
+                        showToast('User promoted to server owner!');
+                        setPromoteForm({ userId: '', serverId: '' });
+                        loadAccounts();
+                      }}
+                    >Promote</Btn>
+                  </div>
+                </div>
+
+                {/* Accounts table */}
+                <div style={S.card}>
+                  <h3 style={{ margin: '0 0 14px' }}>📋 All Accounts</h3>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        {['Username','Email','Role','Server ID','Discord','Joined','Actions'].map(h => (
+                          <th key={h} style={S.th}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {accounts.map(a => (
+                        <tr key={a.id}>
+                          <td style={S.td}><strong>{a.username}</strong></td>
+                          <td style={S.td} ><span style={{ fontSize: 12, color: '#666' }}>{a.email}</span></td>
+                          <td style={S.td}>
+                            {a.role === 'master' && <Badge color="#ffd700" textColor="#333">👑 Master</Badge>}
+                            {a.role === 'owner'  && <Badge color="#87ceeb" textColor="#1a1a1a">🏢 Owner</Badge>}
+                            {a.role === 'player' && <Badge>👤 Player</Badge>}
+                          </td>
+                          <td style={S.td}><span style={{ fontSize: 11, color: '#999' }}>{a.serverId || '—'}</span></td>
+                          <td style={S.td}><span style={{ fontSize: 11, color: '#999' }}>{a.discordId || '—'}</span></td>
+                          <td style={S.td}><span style={{ fontSize: 11, color: '#999' }}>{a.createdAt ? new Date(a.createdAt).toLocaleDateString() : '—'}</span></td>
+                          <td style={S.td}>
+                            {a.role !== 'master' && (
+                              <Btn small color="#dc3545" outline onClick={() =>
+                                doDelete(`Delete account "${a.username}"? This cannot be undone.`, async () => {
+                                  await del(`/api/auth/accounts/${a.id}`);
+                                  loadAccounts();
+                                })
+                              }>Delete</Btn>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {!accounts.length && <EmptyState icon="👥" text="No accounts yet." />}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
