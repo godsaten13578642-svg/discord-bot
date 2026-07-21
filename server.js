@@ -1808,4 +1808,12 @@ client.on(Events.MessageCreate, async (message) => {
 });
 
 client.on(Events.Error, (err) => console.error('❌ Bot error:', err));
-client.login(token);
+
+client.login(token).catch(err => {
+  console.error('❌ Bot login failed:', err.message);
+  console.error('ℹ️  The API server is still running. To fix the bot:');
+  console.error('   1. Go to https://discord.com/developers/applications');
+  console.error('   2. Select your app → Bot → enable "Server Members Intent",');
+  console.error('      "Presence Intent", and "Message Content Intent"');
+  console.error('   3. Save and restart the server');
+});
