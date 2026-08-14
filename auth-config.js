@@ -73,7 +73,23 @@ function authMiddleware(req, res, next) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
-  req.user = decoded;
+  // JWTs are stateless, so refresh authorization from the account record on
+  // every request. This makes role transfers and account deletion immediate.
+  let account;
+  try {
+    account = require('./accounts-db').getAccountById(decoded.userId);
+  } catch (_) {
+    account = null;
+  }
+  if (!account) {
+    return res.status(401).json({ error: 'Account no longer exists' });
+  }
+
+  req.user = {
+    ...decoded,
+    role: account.role,
+    serverId: account.serverId || null
+  };
   next();
 }
 

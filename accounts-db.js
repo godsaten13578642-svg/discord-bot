@@ -131,6 +131,22 @@ function getMasterAccount() {
   return getAccountById(accountsData.masterAccount);
 }
 
+function transferMasterAccount(newMasterId) {
+  const newMaster = getAccountById(newMasterId);
+  if (!newMaster) return { error: 'Target account not found' };
+  if (newMasterId === accountsData.masterAccount) return { error: 'Account is already the master' };
+
+  const oldMasterId = accountsData.masterAccount;
+  const oldMaster = oldMasterId ? getAccountById(oldMasterId) : null;
+
+  newMaster.role = 'master';
+  accountsData.masterAccount = newMasterId;
+  if (oldMaster) oldMaster.role = 'player';
+
+  saveAccounts();
+  return { success: true, oldMasterId, newMasterId };
+}
+
 // Get server owner for a server
 function getServerOwner(serverId) {
   const ownerId = accountsData.serverOwners[serverId];
@@ -220,6 +236,7 @@ module.exports = {
   verifyLogin,
   setServerOwner,
   getMasterAccount,
+  transferMasterAccount,
   getServerOwner,
   getOwnedServerIds,
   resetMasterAccount,

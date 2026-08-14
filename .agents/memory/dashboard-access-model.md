@@ -7,4 +7,4 @@ The master account is the global administrator. Server owners can only view and 
 
 **Why:** The dashboard is multi-server, so UI-only hiding is insufficient—server and feature authorization must be enforced at the API boundary.
 
-**How to apply:** When adding a server-scoped endpoint, authenticate it and validate the requested server against the current account's ownership mappings. Keep server registration, deletion, account listing, promotion, and multi-server administration master-only.
+**How to apply:** When adding a server-scoped endpoint, authenticate it and validate the requested server against the current account's ownership mappings. Keep server registration, deletion, account listing, promotion, and multi-server administration master-only. Re-read the current account role during authentication so transfers and demotions take effect immediately instead of waiting for JWT expiry.

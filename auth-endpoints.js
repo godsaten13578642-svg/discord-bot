@@ -5,6 +5,7 @@ const express = require('express');
 const {
   createAccount,
   verifyLogin,
+  getAccountByEmail,
   getAccountById,
   getMasterAccount,
   resetMasterAccount,
@@ -12,7 +13,8 @@ const {
   getAllAccounts,
   deleteAccount,
   setServerOwner,
-  getOwnedServerIds
+  getOwnedServerIds,
+  transferMasterAccount
 } = require('./accounts-db');
 const {
   generateToken,
@@ -152,6 +154,23 @@ router.post('/api/auth/reset-master', authMiddleware, requireRole('master'), (re
     success: true,
     message: result.message
   });
+});
+
+// Transfer master access to an existing account (master only)
+router.post('/api/auth/transfer-master', authMiddleware, requireRole('master'), (req, res) => {
+  const { userId, email } = req.body;
+  const target = userId ? getAccountById(userId) : getAccountByEmail(email);
+
+  if (!target) {
+    return res.status(404).json({ error: 'Target account not found' });
+  }
+
+  const result = transferMasterAccount(target.id);
+  if (result.error) {
+    return res.status(400).json({ error: result.error });
+  }
+
+  res.json({ success: true, message: 'Master access transferred successfully' });
 });
 
 // Delete an account (master only)

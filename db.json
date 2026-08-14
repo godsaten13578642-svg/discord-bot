@@ -4,6 +4,11 @@
       "serverId": "1522101871156793364",
       "serverName": "ReactSMP",
       "setupAt": "2026-07-12T02:55:54.523Z"
+    },
+    "1494455046182539364": {
+      "serverId": "1494455046182539364",
+      "serverName": "Admin Abuse Event",
+      "setupAt": "2026-08-14T21:31:50.642Z"
     }
   },
   "users": {
@@ -116,8 +121,8 @@
       "hostId": "1023620662625050734",
       "mode": "react",
       "endsAt": "2026-07-14T06:21:50.132Z",
-      "ended": false,
-      "winnerId": null
+      "ended": true,
+      "winnerId": "1023620662625050734"
     }
   },
   "announcements": {},

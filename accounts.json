@@ -4,7 +4,7 @@
       "id": "user_1784597281691_xc5o7yp",
       "email": "test@test.com",
       "passwordHash": "3ee4db061753102e4b4a23616e8cc1d4:987736820d29548059b787ee8d6cfb6c94e70f1df193ca8f39a87704cfb066de7e534124b1e48b617a53b53661c3407fbd4becf8e4d15b27d56453c542b2f184",
-      "role": "master",
+      "role": "player",
       "username": "Test",
       "serverId": null,
       "createdAt": "2026-07-21T01:28:01.703Z",
@@ -15,7 +15,7 @@
       "id": "user_1784597376089_v5vmf1e",
       "email": "memegodmidaswastaken@gmail.com",
       "passwordHash": "7bbaeeae225b63928cb983f5b7fe1a15:923f4495b2e002dd2a3aedab3b4c3718abe8578c5338ec19760bf820d1a4184775fd382e5a925caff5c62ef0d4616af9f1d62313ab3a5d652c827c69505bd2f4",
-      "role": "player",
+      "role": "master",
       "username": "memegodmidas",
       "serverId": null,
       "createdAt": "2026-07-21T01:29:36.091Z",
@@ -34,7 +34,7 @@
       "discordId": null
     }
   },
-  "masterAccount": "user_1784597281691_xc5o7yp",
+  "masterAccount": "user_1784597376089_v5vmf1e",
   "serverOwners": {},
   "totalAccounts": 3
 }
