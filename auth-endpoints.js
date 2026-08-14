@@ -11,7 +11,8 @@ const {
   linkDiscordId,
   getAllAccounts,
   deleteAccount,
-  setServerOwner
+  setServerOwner,
+  getOwnedServerIds
 } = require('./accounts-db');
 const {
   generateToken,
@@ -41,8 +42,8 @@ router.post('/api/auth/signup', (req, res) => {
     return res.status(400).json({ error: result.error });
   }
 
-  const token = generateToken(result.userId, result.role);
   const account = getAccountById(result.userId);
+  const token = generateToken(result.userId, result.role, account?.serverId || null);
 
   res.json({
     success: true,
@@ -69,7 +70,7 @@ router.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ error: result.error });
   }
 
-  const token = generateToken(result.account.id, result.account.role);
+  const token = generateToken(result.account.id, result.account.role, result.account.serverId || null);
 
   res.json({
     success: true,
@@ -95,6 +96,7 @@ router.get('/api/auth/me', authMiddleware, (req, res) => {
     username: account.username,
     role: account.role,
     serverId: account.serverId,
+    serverIds: getOwnedServerIds(account.id),
     discordId: account.discordId,
     createdAt: account.createdAt,
     lastLogin: account.lastLogin
@@ -111,6 +113,7 @@ router.get('/api/auth/accounts', authMiddleware, requireRole('master'), (req, re
     username: acc.username,
     role: acc.role,
     serverId: acc.serverId,
+    serverIds: getOwnedServerIds(acc.id),
     discordId: acc.discordId,
     createdAt: acc.createdAt,
     lastLogin: acc.lastLogin

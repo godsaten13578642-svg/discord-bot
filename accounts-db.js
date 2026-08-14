@@ -113,6 +113,11 @@ function setServerOwner(userId, serverId) {
     account.role = 'owner';
   }
   
+  // Keep the legacy serverId field for compatibility, while allowing an
+  // owner to be assigned more than one server.
+  const ownedServerIds = Array.isArray(account.serverIds) ? account.serverIds : (account.serverId ? [account.serverId] : []);
+  if (!ownedServerIds.includes(serverId)) ownedServerIds.push(serverId);
+  account.serverIds = ownedServerIds;
   account.serverId = serverId;
   accountsData.serverOwners[serverId] = userId;
   saveAccounts();
@@ -131,6 +136,22 @@ function getServerOwner(serverId) {
   const ownerId = accountsData.serverOwners[serverId];
   if (!ownerId) return null;
   return getAccountById(ownerId);
+}
+
+function getOwnedServerIds(userId) {
+  const account = getAccountById(userId);
+  const owned = new Set();
+
+  if (account?.serverId) owned.add(account.serverId);
+  if (Array.isArray(account?.serverIds)) {
+    account.serverIds.forEach(serverId => owned.add(serverId));
+  }
+
+  Object.entries(accountsData.serverOwners || {}).forEach(([serverId, ownerId]) => {
+    if (ownerId === userId) owned.add(serverId);
+  });
+
+  return [...owned];
 }
 
 // Reset master account (console command)
@@ -200,6 +221,7 @@ module.exports = {
   setServerOwner,
   getMasterAccount,
   getServerOwner,
+  getOwnedServerIds,
   resetMasterAccount,
   linkDiscordId,
   getAllAccounts,

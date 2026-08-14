@@ -10,6 +10,8 @@ app.use(express.json());
 // ── Accounts & Authentication ──────────────────────────────────────────────────
 const authRouter = require('./auth-endpoints');
 app.use(authRouter);
+const { authMiddleware, requireRole } = require('./auth-config');
+const { getAccountById, getOwnedServerIds } = require('./accounts-db');
 
 // ── Persistent JSON Database ───────────────────────────────────────────────────
 const DB_FILE = './db.json';
@@ -97,6 +99,18 @@ function setServerFeature(serverId, updates) {
   Object.assign(data.serverFeatures[key], updates);
 }
 
+function serverIdsForUser(req) {
+  if (req.user?.role === 'master') return Object.keys(data.servers);
+  return getOwnedServerIds(req.user?.userId).filter(serverId => data.servers[serverId]);
+}
+
+function requireServerAccess(req, res, next) {
+  const serverId = String(req.query.serverId || req.params.id || req.body?.serverId || '');
+  if (req.user?.role === 'master') return next();
+  if (req.user?.role === 'owner' && serverId && serverIdsForUser(req).includes(serverId)) return next();
+  return res.status(403).json({ error: 'You do not have access to this server' });
+}
+
 // Backward-compat proxy so existing bot handlers (features.xpEnabled etc.) keep working.
 // Reads from the first registered server, falls back to _global defaults.
 const features = new Proxy({}, {
@@ -172,12 +186,19 @@ app.get('/api/stats', (_, res) => res.json({
 }));
 
 // ── Features (per-server) ──────────────────────────────────────────────────────
-app.get('/api/features', (req, res) => {
-  const { serverId } = req.query;
+app.get('/api/features', authMiddleware, (req, res) => {
+  const serverId = req.query.serverId || (req.user.role === 'owner' ? serverIdsForUser(req)[0] : null);
+  if (req.user.role !== 'master' && !serverId) {
+    return res.status(403).json({ error: 'No server has been assigned to this account' });
+  }
+  if (serverId && req.user.role !== 'master' && !serverIdsForUser(req).includes(String(serverId))) {
+    return res.status(403).json({ error: 'You do not have access to this server' });
+  }
   res.json(getServerFeatures(serverId));
 });
-app.post('/api/features', (req, res) => {
+app.post('/api/features', authMiddleware, requireServerAccess, (req, res) => {
   const { serverId } = req.query;
+  if (!serverId) return res.status(400).json({ error: 'serverId required' });
   const { serverId: _ignore, ...updates } = req.body;
   setServerFeature(serverId, updates);
   saveDb();
@@ -185,11 +206,13 @@ app.post('/api/features', (req, res) => {
 });
 
 // ── Discord Channels (for dashboard dropdowns) ─────────────────────────────────
-app.get('/api/channels', (_, res) => {
+app.get('/api/channels', authMiddleware, (req, res) => {
   if (!global.botClient?.isReady()) return res.json([]);
+  const visibleServerIds = new Set(serverIdsForUser(req));
   const channels = [];
   global.botClient.channels.cache.forEach(ch => {
     if (ch.type === 0) { // GUILD_TEXT
+      if (req.user.role !== 'master' && !visibleServerIds.has(ch.guildId)) return;
       const guild = global.botClient.guilds.cache.get(ch.guildId);
       channels.push({ id: ch.id, name: `#${ch.name}`, guild: guild?.name || 'Unknown', guildId: ch.guildId });
     }
@@ -752,10 +775,16 @@ app.delete('/api/announcements/:id', (req, res) => {
 });
 
 // ── Servers ────────────────────────────────────────────────────────────────────
-app.get('/api/servers', (_, res) => res.json(Object.values(data.servers)));
+app.get('/api/servers', authMiddleware, (req, res) => {
+  const visibleServerIds = new Set(serverIdsForUser(req));
+  const servers = Object.values(data.servers).filter(server =>
+    req.user.role === 'master' || visibleServerIds.has(server.serverId)
+  );
+  res.json(servers);
+});
 
 // Manual server add from dashboard
-app.post('/api/servers/add', (req, res) => {
+app.post('/api/servers/add', authMiddleware, requireRole('master'), (req, res) => {
   const { serverId, serverName } = req.body;
   if (!serverId || !serverName) return res.status(400).json({ error: 'serverId and serverName required' });
   if (data.servers[serverId]) return res.status(400).json({ error: 'Server already exists' });
@@ -765,14 +794,14 @@ app.post('/api/servers/add', (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/servers/setup', (req, res) => {
+app.post('/api/servers/setup', authMiddleware, requireRole('master'), (req, res) => {
   const { serverId, serverName } = req.body;
   data.servers[serverId] = { serverId, serverName, setupAt: new Date() };
   if (!data.serverFeatures[serverId]) data.serverFeatures[serverId] = {};
   saveDb();
   res.json({ success: true });
 });
-app.delete('/api/servers/:id', (req, res) => {
+app.delete('/api/servers/:id', authMiddleware, requireRole('master'), (req, res) => {
   if (!data.servers[req.params.id]) return res.status(404).json({ error: 'Not found' });
   delete data.servers[req.params.id];
   saveDb();

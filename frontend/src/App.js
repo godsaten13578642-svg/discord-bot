@@ -267,6 +267,7 @@ export default function App() {
   };
 
   const { stats, bot, civs, users, servers, features, religions, teams, cults, rebels, alliances, economy, events, bounties } = state;
+  const serverChannels = channels.filter(ch => !selectedServerId || ch.guildId === selectedServerId);
   const wars  = alliances.filter(a => a.type === 'war');
   const allies = alliances.filter(a => a.type === 'alliance');
 
@@ -342,7 +343,9 @@ export default function App() {
             </div>
           </div>
           <div style={{ display: 'flex', overflowX: 'auto' }}>
-            {TABS.map(t => <button key={t} style={tabStyle(t)} onClick={() => setTab(t)}>{t}</button>)}
+            {TABS.filter(t => userRole === 'master' || t !== 'Accounts').map(t => (
+              <button key={t} style={tabStyle(t)} onClick={() => setTab(t)}>{t}</button>
+            ))}
           </div>
         </div>
       </div>
@@ -638,43 +641,45 @@ export default function App() {
         {/* Servers */}
         {tab === 'Servers' && (
           <div>
-            {/* Add Server */}
-            <div style={{ ...S.card, marginBottom: 16 }}>
-              <h3 style={{ margin: '0 0 14px' }}>➕ Add Server</h3>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                <div style={{ flex: 1, minWidth: 160 }}>
-                  <div style={S.label}>Server Name</div>
-                  <input
-                    type="text" placeholder="My Discord Server"
-                    value={addServerForm.serverName}
-                    onChange={e => setAddServerForm(f => ({ ...f, serverName: e.target.value }))}
-                    style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
-                  />
+            {/* Only the master can register or remove servers. */}
+            {userRole === 'master' && (
+              <div style={{ ...S.card, marginBottom: 16 }}>
+                <h3 style={{ margin: '0 0 14px' }}>➕ Add Server</h3>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <div style={{ flex: 1, minWidth: 160 }}>
+                    <div style={S.label}>Server Name</div>
+                    <input
+                      type="text" placeholder="My Discord Server"
+                      value={addServerForm.serverName}
+                      onChange={e => setAddServerForm(f => ({ ...f, serverName: e.target.value }))}
+                      style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={S.label}>Discord Server ID</div>
+                    <input
+                      type="text" placeholder="e.g. 123456789012345678"
+                      value={addServerForm.serverId}
+                      onChange={e => setAddServerForm(f => ({ ...f, serverId: e.target.value }))}
+                      style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <Btn
+                    disabled={!addServerForm.serverId.trim() || !addServerForm.serverName.trim()}
+                    onClick={async () => {
+                      const r = await post('/api/servers/add', addServerForm);
+                      if (r.error) { showToast(r.error, false); return; }
+                      showToast('Server added!');
+                      setAddServerForm({ serverId: '', serverName: '' });
+                      load();
+                    }}
+                  >Add Server</Btn>
                 </div>
-                <div style={{ flex: 1, minWidth: 200 }}>
-                  <div style={S.label}>Discord Server ID</div>
-                  <input
-                    type="text" placeholder="e.g. 123456789012345678"
-                    value={addServerForm.serverId}
-                    onChange={e => setAddServerForm(f => ({ ...f, serverId: e.target.value }))}
-                    style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
-                  />
+                <div style={{ fontSize: 12, color: '#aaa', marginTop: 10 }}>
+                  💡 The Discord Server ID can be found by right-clicking your server name in Discord (enable Developer Mode in settings first).
                 </div>
-                <Btn
-                  disabled={!addServerForm.serverId.trim() || !addServerForm.serverName.trim()}
-                  onClick={async () => {
-                    const r = await post('/api/servers/add', addServerForm);
-                    if (r.error) { showToast(r.error, false); return; }
-                    showToast('Server added!');
-                    setAddServerForm({ serverId: '', serverName: '' });
-                    load();
-                  }}
-                >Add Server</Btn>
               </div>
-              <div style={{ fontSize: 12, color: '#aaa', marginTop: 10 }}>
-                💡 The Discord Server ID can be found by right-clicking your server name in Discord (enable Developer Mode in settings first).
-              </div>
-            </div>
+            )}
 
             {/* Servers list */}
             <div style={S.card}>
@@ -693,7 +698,9 @@ export default function App() {
                       <td style={S.td}>
                         <div style={{ display: 'flex', gap: 6 }}>
                           <Btn small outline onClick={() => setSelectedServerId(s.serverId)}>Select</Btn>
-                          <Btn small color="#dc3545" outline onClick={() => doDelete(`Remove ${s.serverName}?`, () => del(`/api/servers/${s.serverId}`))}>Remove</Btn>
+                          {userRole === 'master' && (
+                            <Btn small color="#dc3545" outline onClick={() => doDelete(`Remove ${s.serverName}?`, () => del(`/api/servers/${s.serverId}`))}>Remove</Btn>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -947,7 +954,7 @@ export default function App() {
                     style={{ width: '100%', padding: '8px 11px', border: '1.5px solid #ddd', borderRadius: 7, fontSize: 14 }}
                   >
                     <option value="">— Use default announcement channel —</option>
-                    {channels.map(ch => <option key={ch.id} value={ch.id}>{ch.name} ({ch.guild})</option>)}
+                    {serverChannels.map(ch => <option key={ch.id} value={ch.id}>{ch.name} ({ch.guild})</option>)}
                   </select>
                   {!channels.length && <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 4 }}>⚠️ Bot must be online to load channels. Set a default in Settings.</div>}
                 </div>
@@ -995,7 +1002,7 @@ export default function App() {
                 const isCancelled = a.cancelled;
                 const statusColor = isPending ? '#f59e0b' : isSent ? '#198754' : '#aaa';
                 const statusText  = isPending ? `⏰ Scheduled: ${new Date(a.scheduledAt).toLocaleString()}` : isSent ? `✅ Sent: ${new Date(a.sentAt).toLocaleString()}` : '❌ Cancelled';
-                const ch = channels.find(c => c.id === a.channelId);
+                const ch = serverChannels.find(c => c.id === a.channelId);
                 return (
                   <div key={a.id} style={{ borderBottom: '1px solid #f0f0f0', padding: '12px 0', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -1038,15 +1045,15 @@ export default function App() {
               </div>
               <Toggle label="Bot Commands" description="Enable all ! prefix commands" checked={features.commandsEnabled} onChange={v => toggleFeature('commandsEnabled', v)} />
               <Toggle label="Auto-Register Members" description="Track members automatically when they join" checked={features.autoRegisterMembers} onChange={v => toggleFeature('autoRegisterMembers', v)} />
-              {!channels.length && <div style={{ fontSize: 12, color: '#f59e0b', padding: '8px 0' }}>⚠️ Bot must be online to load channel dropdowns.</div>}
+               {!serverChannels.length && <div style={{ fontSize: 12, color: '#f59e0b', padding: '8px 0' }}>⚠️ Bot must be online to load channel dropdowns for this server.</div>}
             </SettingsGroup>
 
             {/* Welcome & Notifications */}
             <SettingsGroup title="Welcome & Notifications" icon="👋">
               <Toggle label="Welcome Messages" description="Post a welcome message when members join" checked={features.welcomeMessages} onChange={v => toggleFeature('welcomeMessages', v)} />
-              <ChannelSelect label="Welcome Channel" description="Where to post join/leave messages" value={features.welcomeChannelId} onChange={v => setFeature('welcomeChannelId', v)} channels={channels} enabled={features.welcomeMessages} />
+               <ChannelSelect label="Welcome Channel" description="Where to post join/leave messages" value={features.welcomeChannelId} onChange={v => setFeature('welcomeChannelId', v)} channels={serverChannels} enabled={features.welcomeMessages} />
               <Toggle label="Level-Up Announcements" description="Announce when members level up" checked={features.levelupEnabled} onChange={v => toggleFeature('levelupEnabled', v)} />
-              <ChannelSelect label="Level-Up Channel" description="Where to post level-up announcements (falls back to welcome channel)" value={features.levelupChannelId} onChange={v => setFeature('levelupChannelId', v)} channels={channels} enabled={features.levelupEnabled} />
+               <ChannelSelect label="Level-Up Channel" description="Where to post level-up announcements (falls back to welcome channel)" value={features.levelupChannelId} onChange={v => setFeature('levelupChannelId', v)} channels={serverChannels} enabled={features.levelupEnabled} />
             </SettingsGroup>
 
             {/* XP & Economy */}
@@ -1060,23 +1067,23 @@ export default function App() {
             {/* Bounties */}
             <SettingsGroup title="Bounties" icon="🎯">
               <Toggle label="Bounty System" description="Allow placing gold bounties on players" checked={features.bountyEnabled} onChange={v => toggleFeature('bountyEnabled', v)} />
-              <ChannelSelect label="Bounty Channel" description="Where to announce new/claimed bounties" value={features.bountyChannelId} onChange={v => setFeature('bountyChannelId', v)} channels={channels} enabled={features.bountyEnabled} />
+               <ChannelSelect label="Bounty Channel" description="Where to announce new/claimed bounties" value={features.bountyChannelId} onChange={v => setFeature('bountyChannelId', v)} channels={serverChannels} enabled={features.bountyEnabled} />
             </SettingsGroup>
 
             {/* Polls */}
             <SettingsGroup title="Polls" icon="📊">
               <Toggle label="Polls" description="Allow !poll to create community votes" checked={features.pollsEnabled} onChange={v => toggleFeature('pollsEnabled', v)} />
-              <ChannelSelect label="Polls Channel" description="Where polls are posted by default" value={features.pollsChannelId} onChange={v => setFeature('pollsChannelId', v)} channels={channels} enabled={features.pollsEnabled} />
+               <ChannelSelect label="Polls Channel" description="Where polls are posted by default" value={features.pollsChannelId} onChange={v => setFeature('pollsChannelId', v)} channels={serverChannels} enabled={features.pollsEnabled} />
             </SettingsGroup>
 
             {/* Giveaways */}
             <SettingsGroup title="Giveaways" icon="🎉">
               <Toggle label="Giveaways" description="!giveaway <duration> <prize> — react with 🎉 to enter" checked={features.giveawaysEnabled} onChange={v => toggleFeature('giveawaysEnabled', v)} />
-              <ChannelSelect label="Giveaway Channel" description="Where giveaways are posted (defaults to channel the command is used in)" value={features.giveawayChannelId} onChange={v => setFeature('giveawayChannelId', v)} channels={channels} enabled={features.giveawaysEnabled} />
+               <ChannelSelect label="Giveaway Channel" description="Where giveaways are posted (defaults to channel the command is used in)" value={features.giveawayChannelId} onChange={v => setFeature('giveawayChannelId', v)} channels={serverChannels} enabled={features.giveawaysEnabled} />
             </SettingsGroup>
 
             <SettingsGroup title="Announcements" icon="📢">
-              <ChannelSelect label="Default Announcement Channel" description="Channel used when no channel is selected in the Announcements tab" value={features.announcementChannelId} onChange={v => setFeature('announcementChannelId', v)} channels={channels} enabled={true} />
+               <ChannelSelect label="Default Announcement Channel" description="Channel used when no channel is selected in the Announcements tab" value={features.announcementChannelId} onChange={v => setFeature('announcementChannelId', v)} channels={serverChannels} enabled={true} />
             </SettingsGroup>
 
             {/* Fun Commands */}
@@ -1097,21 +1104,21 @@ export default function App() {
             <SettingsGroup title="Diplomacy" icon="⚔️">
               <Toggle label="Wars & Alliances" description="Allow declaring war and forming alliances" checked={features.warsEnabled} onChange={v => toggleFeature('warsEnabled', v)} />
               <Toggle label="Diplomacy Announcements" description="Post war/alliance news to a channel" checked={features.diplomacyAnnouncementsEnabled} onChange={v => toggleFeature('diplomacyAnnouncementsEnabled', v)} />
-              <ChannelSelect label="Diplomacy Channel" description="Where wars and alliances are announced" value={features.diplomacyChannelId} onChange={v => setFeature('diplomacyChannelId', v)} channels={channels} enabled={features.diplomacyAnnouncementsEnabled} />
+               <ChannelSelect label="Diplomacy Channel" description="Where wars and alliances are announced" value={features.diplomacyChannelId} onChange={v => setFeature('diplomacyChannelId', v)} channels={serverChannels} enabled={features.diplomacyAnnouncementsEnabled} />
             </SettingsGroup>
 
             {/* Events */}
             <SettingsGroup title="Events" icon="📅">
               <Toggle label="Events" description="Allow creating and joining events" checked={features.eventsEnabled} onChange={v => toggleFeature('eventsEnabled', v)} />
-              <ChannelSelect label="Events Channel" description="Where new/completed events are announced" value={features.eventsChannelId} onChange={v => setFeature('eventsChannelId', v)} channels={channels} enabled={features.eventsEnabled} />
+               <ChannelSelect label="Events Channel" description="Where new/completed events are announced" value={features.eventsChannelId} onChange={v => setFeature('eventsChannelId', v)} channels={serverChannels} enabled={features.eventsEnabled} />
             </SettingsGroup>
 
             {/* Minecraft Bridge */}
             <SettingsGroup title="Minecraft Bridge" icon="🎮">
               <Toggle label="MC↔Discord Bridge" description="Relay Minecraft chat to Discord and back" checked={features.bridgeEnabled} onChange={v => toggleFeature('bridgeEnabled', v)} />
-              <ChannelSelect label="Bridge Channel" description="Discord channel linked to Minecraft chat" value={features.bridgeChannelId} onChange={v => setFeature('bridgeChannelId', v)} channels={channels} enabled={features.bridgeEnabled} />
+               <ChannelSelect label="Bridge Channel" description="Discord channel linked to Minecraft chat" value={features.bridgeChannelId} onChange={v => setFeature('bridgeChannelId', v)} channels={serverChannels} enabled={features.bridgeEnabled} />
               <Toggle label="MC Event Announcements" description="Announce player joins, deaths, advancements" checked={features.mcEventsEnabled} onChange={v => toggleFeature('mcEventsEnabled', v)} />
-              <ChannelSelect label="MC Events Channel" description="Where MC player events are posted" value={features.mcEventsChannelId} onChange={v => setFeature('mcEventsChannelId', v)} channels={channels} enabled={features.mcEventsEnabled} />
+               <ChannelSelect label="MC Events Channel" description="Where MC player events are posted" value={features.mcEventsChannelId} onChange={v => setFeature('mcEventsChannelId', v)} channels={serverChannels} enabled={features.mcEventsEnabled} />
               <div style={{ padding: '11px 0', borderBottom: '1px solid #f5f5f5' }}>
                 <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>MC API Key</div>
                 <div style={{ fontSize: 12, color: '#999', marginBottom: 6 }}>Set this in your Paper plugin's config.yml</div>

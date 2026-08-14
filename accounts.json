@@ -19,11 +19,22 @@
       "username": "memegodmidas",
       "serverId": null,
       "createdAt": "2026-07-21T01:29:36.091Z",
+      "lastLogin": "2026-07-21T01:47:16.557Z",
+      "discordId": null
+    },
+    "user_1784598179027_ihl4g46": {
+      "id": "user_1784598179027_ihl4g46",
+      "email": "godsaten13578642@gmail.com",
+      "passwordHash": "bad9d7b38fda9e1f2f6a72ef465a4e23:f8de1bb7ff7c99a4d3d62b74bbb66563f3d466628e9c5a863a7f4cd4adc34862687f8f33f9aa04604bc9195080ac9e545719245e3f4ff5ef2a188d7d489df1d0",
+      "role": "player",
+      "username": "godsatan",
+      "serverId": null,
+      "createdAt": "2026-07-21T01:42:59.029Z",
       "lastLogin": null,
       "discordId": null
     }
   },
   "masterAccount": "user_1784597281691_xc5o7yp",
   "serverOwners": {},
-  "totalAccounts": 2
+  "totalAccounts": 3
 }
