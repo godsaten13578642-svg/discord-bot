@@ -15,7 +15,7 @@
       "id": "user_1784597376089_v5vmf1e",
       "email": "memegodmidaswastaken@gmail.com",
       "passwordHash": "7bbaeeae225b63928cb983f5b7fe1a15:923f4495b2e002dd2a3aedab3b4c3718abe8578c5338ec19760bf820d1a4184775fd382e5a925caff5c62ef0d4616af9f1d62313ab3a5d652c827c69505bd2f4",
-      "role": "master",
+      "role": "owner",
       "username": "memegodmidas",
       "serverId": null,
       "createdAt": "2026-07-21T01:29:36.091Z",
@@ -32,9 +32,20 @@
       "createdAt": "2026-07-21T01:42:59.029Z",
       "lastLogin": null,
       "discordId": null
+    },
+    "user_1788733429888_vi9sml0": {
+      "id": "user_1788733429888_vi9sml0",
+      "email": "owner@civbot.admin",
+      "passwordHash": "6db0f89dd92157893b7399aa22498fde:b553bec1fdfd413f72ce491b3cd7c00db51e0067829bd20b503e1fe5013181d237a873ebc1c48647b57e0c241478e1fbf0a91a77a94a60f9c45c5bbdc9f8223b",
+      "role": "master",
+      "username": "OfficialOwner",
+      "serverId": null,
+      "createdAt": "2026-09-06T22:23:49.890Z",
+      "lastLogin": "2026-09-06T22:23:53.837Z",
+      "discordId": null
     }
   },
-  "masterAccount": "user_1784597376089_v5vmf1e",
+  "masterAccount": "user_1788733429888_vi9sml0",
   "serverOwners": {},
-  "totalAccounts": 3
+  "totalAccounts": 4
 }

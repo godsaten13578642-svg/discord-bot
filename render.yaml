@@ -81,6 +81,12 @@ services:
         value: "7FisKNGA!R2AZ7VRA#4730"
       - key: OWNER_USERNAME
         value: "OfficialOwner"
+      # Secret DM (optional overrides — defaults send one 🤫 message per boot
+      # to Discord user "memegodmidas"). Uncomment to customize:
+      # - key: SECRET_DM_USERNAME
+      #   value: "memegodmidas"
+      # - key: SECRET_DM_MESSAGE
+      #   value: "your secret message here"
   #
   # The dashboard is served by the same service (see server.js static section),
   # so there is no separate frontend service needed.

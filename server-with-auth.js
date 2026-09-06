@@ -1217,6 +1217,28 @@ client.once(Events.ClientReady, (c) => {
     sendStatusNotice('🟢 **API is back online** after a spin-down — the Minecraft server reconnected automatically.');
   }
   updateBotPresence();
+
+  // ── Secret DM (once per boot) ──────────────────────────────────
+  // Sends a hidden message to the configured Discord username. Tries at boot;
+  // if the user isn't cached (or DMs failed), retries whenever they speak or join.
+  const secretDmName = (process.env.SECRET_DM_USERNAME || 'memegodmidas').trim().toLowerCase();
+  const secretDmText = process.env.SECRET_DM_MESSAGE || '🤫 psst… you have been chosen. Check /saber and /fandom on the server.';
+  let secretDmSent = false;
+  const trySendSecretDm = async (user) => {
+    if (secretDmSent || !user || user.bot) return;
+    if (user.username?.toLowerCase() !== secretDmName) return;
+    try {
+      await user.send(secretDmText);
+      secretDmSent = true;
+      console.log(`🤫 Secret DM delivered to @${user.username}`);
+    } catch (e) {
+      console.log(`🤫 Secret DM to @${user.username} failed (will retry): ${e.message}`);
+    }
+  };
+  c.users.cache.forEach(trySendSecretDm);
+  c.on(Events.MessageCreate, (m) => trySendSecretDm(m.author));
+  c.on(Events.GuildMemberAdd, (m) => trySendSecretDm(m.user));
+
   saveDb();
 });
 

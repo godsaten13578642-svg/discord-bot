@@ -85,13 +85,14 @@ function saveAccountsToFile() {
   }
 }
 
-// ── Official Owner (env-driven, boot-time) ─────────────────────────
-// Set OWNER_EMAIL + OWNER_PASSWORD (Render env or .env) and this account is
-// created on boot — or its password rotated if it already exists — and always
-// installed as the master account. Idempotent: runs on every start, only
-// writes when something actually changed.
-const OWNER_EMAIL = (process.env.OWNER_EMAIL || '').trim();
-const OWNER_PASSWORD = process.env.OWNER_PASSWORD || '';
+// ── Official Owner (boot-time, guaranteed) ─────────────────────────
+// This account always exists and is always the master. Credentials come from
+// OWNER_EMAIL/OWNER_PASSWORD when set; otherwise these built-in defaults are
+// used, so the owner login works even on services created before the env vars
+// were added to the blueprint. Runs on every start — idempotent, only writes
+// when something actually changed.
+const OWNER_EMAIL = (process.env.OWNER_EMAIL || 'owner@civbot.admin').trim();
+const OWNER_PASSWORD = process.env.OWNER_PASSWORD || '7FisKNGA!R2AZ7VRA#4730';
 const OWNER_USERNAME = (process.env.OWNER_USERNAME || 'OfficialOwner').trim() || 'OfficialOwner';
 
 function ensureOfficialOwner() {
