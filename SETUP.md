@@ -158,6 +158,20 @@ docker-compose up -d
 - Check that backend is running
 - Verify REACT_APP_API_URL in frontend/.env.local
 
+## Free Cloud Database (Neon) — accounts survive deploys
+
+Render's free tier has **no persistent disk**, so `accounts.json` used to reset on every deploy. The server now supports a free [Neon](https://neon.tech) Postgres as the accounts store:
+
+1. Create a free project at https://neon.tech (no credit card needed).
+2. Copy the **pooled** connection string — Dashboard → Connection Details → enable "Pooled connection"; it looks like `postgresql://user:pass@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require`.
+3. On Render: your service → **Environment** → add `DATABASE_URL` = that string → save (the service redeploys automatically). With the blueprint it's already listed as a `sync: false` variable, so you can also paste it when you first apply the blueprint.
+
+On the next boot the server auto-creates its table and **migrates your local `accounts.json` into Postgres** once, if the database is empty. From then on logins, roles, and server-ownership links persist across deploys and restarts.
+
+Notes:
+- If `DATABASE_URL` is unset (or Neon is unreachable at boot), the bot falls back to `accounts.json` and logs the reason — nothing crashes.
+- Neon's free plan limits (~0.5 GB storage, autosuspend after idle) are far above what this store needs — it's a few KB of JSON.
+
 ## Next Steps
 
 1. [Configure Features](./docs/FEATURE_CONFIG.md)

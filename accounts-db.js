@@ -1,37 +1,176 @@
 // ── Accounts Database Handler ──────────────────────────────────────
-// Manages user accounts, authentication, and account data
+// Manages user accounts, authentication, and account data.
+//
+// Backing store:
+//   • DATABASE_URL set  → Postgres (free Neon tier works great). Data
+//     survives Render free-tier deploys/restarts.
+//   • no DATABASE_URL   → ./accounts.json (local dev / old behavior).
+//
+// The exported API stays synchronous either way (writes in Postgres
+// mode are fire-and-forget, serialized by the DB row lock).
+//
+// First connect auto-migrates: if the database is empty and a local
+// accounts.json exists, its accounts are imported. Once the DB has
+// data, it always wins over the file.
 
 const fs = require('fs');
 const { hashPassword, verifyPassword } = require('./auth-config');
 
 const ACCOUNTS_DB_FILE = './accounts.json';
+const DATABASE_URL = (process.env.DATABASE_URL || '').trim();
 
-let accountsData = {
+const EMPTY_STORE = () => ({
   accounts: {},           // userId -> { id, email, passwordHash, role, username, serverId, createdAt, lastLogin }
   masterAccount: null,    // ID of master account
   serverOwners: {},       // serverId -> ownerId
   totalAccounts: 0
-};
+});
 
-// Load accounts from file
-function loadAccounts() {
+let accountsData = EMPTY_STORE();
+
+// ── Postgres setup ─────────────────────────────────────────────────
+let pgPool = null;
+let usingPostgres = false;
+let readyPromise = null;
+
+if (DATABASE_URL) {
+  try {
+    const { Pool } = require('pg');
+    pgPool = new Pool({
+      connectionString: DATABASE_URL,
+      // Neon (and most managed Postgres) require SSL; local sockets don't.
+      ssl: /localhost|127\.0\.0\.1/.test(DATABASE_URL) ? undefined : { rejectUnauthorized: false },
+      max: 5,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 10_000,
+    });
+    usingPostgres = true;
+    console.log('🗄️  Accounts store: Postgres (DATABASE_URL set)');
+  } catch (e) {
+    console.error('⚠️  DATABASE_URL is set but the pg driver is unavailable — using accounts.json instead:', e.message);
+  }
+} else {
+  console.log('🗄️  Accounts store: accounts.json (file mode)');
+}
+
+// ── File-mode helpers ──────────────────────────────────────────────
+function readLocalFile() {
   try {
     if (fs.existsSync(ACCOUNTS_DB_FILE)) {
-      accountsData = JSON.parse(fs.readFileSync(ACCOUNTS_DB_FILE, 'utf8'));
+      const parsed = JSON.parse(fs.readFileSync(ACCOUNTS_DB_FILE, 'utf8'));
+      return {
+        accounts: parsed.accounts || {},
+        masterAccount: parsed.masterAccount ?? null,
+        serverOwners: parsed.serverOwners || {},
+        totalAccounts: Object.keys(parsed.accounts || {}).length,
+      };
     }
   } catch (e) {
-    console.error('Error loading accounts:', e.message);
+    console.error('Error reading accounts.json:', e.message);
   }
+  return EMPTY_STORE();
+}
+
+// Load accounts from file (file mode / fallback seed)
+function loadAccounts() {
+  accountsData = readLocalFile();
 }
 
 // Save accounts to file
-function saveAccounts() {
+function saveAccountsToFile() {
   try {
     fs.writeFileSync(ACCOUNTS_DB_FILE, JSON.stringify(accountsData, null, 2));
   } catch (e) {
     console.error('Error saving accounts:', e.message);
   }
 }
+
+// ── Postgres helpers ───────────────────────────────────────────────
+// Upsert keeps this safe even if a request sneaks in before init finishes.
+function pgSave() {
+  return pgPool.query(
+    `INSERT INTO accounts_state (id, payload, updated_at)
+     VALUES (1, $1::jsonb, now())
+     ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()`,
+    [JSON.stringify(accountsData)]
+  );
+}
+
+function normalizeStore(stored) {
+  const accounts = stored?.accounts || {};
+  return {
+    accounts,
+    masterAccount: stored?.masterAccount ?? null,
+    serverOwners: stored?.serverOwners || {},
+    totalAccounts: Object.keys(accounts).length,
+  };
+}
+
+async function pgInit() {
+  await pgPool.query(
+    `CREATE TABLE IF NOT EXISTS accounts_state (
+       id         INTEGER PRIMARY KEY,
+       payload    JSONB NOT NULL,
+       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+     )`
+  );
+
+  const { rows } = await pgPool.query('SELECT payload FROM accounts_state WHERE id = 1');
+
+  if (rows.length > 0) {
+    accountsData = normalizeStore(rows[0].payload);
+
+    // One-time migration: DB exists but is empty while the local file
+    // has accounts (e.g. you just created the Neon database) → import.
+    if (Object.keys(accountsData.accounts).length === 0) {
+      const local = readLocalFile();
+      if (Object.keys(local.accounts).length > 0) {
+        accountsData = local;
+        await pgSave();
+        console.log(`📦 Migrated ${local.totalAccounts} account(s) from accounts.json into Postgres`);
+      }
+    }
+    console.log(`🗄️  Accounts loaded from Postgres (${Object.keys(accountsData.accounts).length} account(s))`);
+  } else {
+    // Fresh database: seed it with whatever accounts.json holds (may be none).
+    accountsData = readLocalFile();
+    await pgSave();
+    if (accountsData.totalAccounts > 0) {
+      console.log(`📦 Migrated ${accountsData.totalAccounts} account(s) from accounts.json into Postgres`);
+    } else {
+      console.log('🗄️  Fresh Postgres accounts store created');
+    }
+  }
+}
+
+// Resolve once the store is fully loaded/migrated. Await this at startup
+// (before server.listen) so no request ever sees an empty store.
+function whenReady() {
+  if (!readyPromise) {
+    if (usingPostgres) {
+      readyPromise = pgInit().catch(e => {
+        console.error('⚠️  Postgres unavailable, falling back to accounts.json:', e.message);
+        usingPostgres = false;
+        try { pgPool = null; } catch (_) { /* noop */ }
+        loadAccounts();
+      });
+    } else {
+      readyPromise = Promise.resolve();
+    }
+  }
+  return readyPromise;
+}
+
+// Save accounts (synchronous API; Postgres writes are fire-and-forget)
+function saveAccounts() {
+  if (usingPostgres) {
+    pgSave().catch(e => console.error('❌ Accounts save to Postgres failed:', e.message));
+    return;
+  }
+  saveAccountsToFile();
+}
+
+// ── Account operations (unchanged behavior) ────────────────────────
 
 // Check if master account exists
 function hasMasterAccount() {
@@ -46,11 +185,11 @@ function createAccount(email, password, username, role = 'player', serverId = nu
   }
 
   const userId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-  
+
   // First account becomes master
   const isMasterAccount = !hasMasterAccount();
   const finalRole = isMasterAccount ? 'master' : role;
-  
+
   accountsData.accounts[userId] = {
     id: userId,
     email,
@@ -112,7 +251,7 @@ function setServerOwner(userId, serverId) {
   if (account.role === 'player') {
     account.role = 'owner';
   }
-  
+
   // Keep the legacy serverId field for compatibility, while allowing an
   // owner to be assigned more than one server.
   const ownedServerIds = Array.isArray(account.serverIds) ? account.serverIds : (account.serverId ? [account.serverId] : []);
@@ -211,7 +350,7 @@ function deleteAccount(userId) {
 
   delete accountsData.accounts[userId];
   accountsData.totalAccounts = Math.max(0, accountsData.totalAccounts - 1);
-  
+
   // Remove from server owners if applicable
   Object.keys(accountsData.serverOwners).forEach(serverId => {
     if (accountsData.serverOwners[serverId] === userId) {
@@ -223,10 +362,12 @@ function deleteAccount(userId) {
   return { success: true };
 }
 
-// Initialize accounts
+// Initialize accounts (file seed; Postgres data replaces it in whenReady)
 loadAccounts();
 
 module.exports = {
+  whenReady,
+  isUsingPostgres: () => usingPostgres,
   loadAccounts,
   saveAccounts,
   hasMasterAccount,

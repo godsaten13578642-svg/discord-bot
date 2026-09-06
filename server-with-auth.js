@@ -1036,7 +1036,11 @@ wss.on('connection', (ws, req) => {
   ws.on('error', () => global.mcWsClients.delete(ws));
 });
 
-httpServer.listen(API_PORT, () => console.log(`🌐 API + WebSocket on port ${API_PORT} (ws path: /ws)\n🔐 Authentication enabled - Accounts stored in accounts.json`));
+// Wait for the accounts store (Postgres/Neon when DATABASE_URL is set, else
+// accounts.json) before accepting traffic.
+require('./accounts-db').whenReady().then(() => {
+  httpServer.listen(API_PORT, () => console.log(`🌐 API + WebSocket on port ${API_PORT} (ws path: /ws)\n🔐 Authentication enabled`));
+});
 
 // ── Discord Bot ─────────────────────────────────────────────────────────────────────
 const token = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;

@@ -21,8 +21,9 @@
 #   - Free services spin down after 15 min without inbound traffic; server.js
 #     self-pings /health every 10 min to stay awake, but wake-ups can still
 #     happen and cost a ~50s cold start on the next request.
-#   - Free tier has NO persistent disk: files written at runtime (accounts.json
-#     updates, saved error reports) reset on every deploy/restart.
+#   - Free tier has NO persistent disk: files written at runtime (error
+#     reports, db.json) reset on every deploy/restart. Set DATABASE_URL to a
+#     free Neon Postgres so accounts survive.
 
 services:
   # Single service: Express API + WebSocket bridge + Discord bot + dashboard +
@@ -58,6 +59,13 @@ services:
         generateValue: true  # auto-generate a strong key shared with the plugin
       - key: JWT_SECRET
         generateValue: true
+      # Free Neon Postgres — accounts survive deploys/restarts (no more
+      # accounts.json reset). Create a project at https://neon.tech, copy the
+      # pooled connection string (…-pooler…/neondb), and paste it here (or in
+      # the Render dashboard) after the first deploy. Without it the bot falls
+      # back to accounts.json, which resets on every free-tier deploy.
+      - key: DATABASE_URL
+        sync: false
   #
   # The dashboard is served by the same service (see server.js static section),
   # so there is no separate frontend service needed.

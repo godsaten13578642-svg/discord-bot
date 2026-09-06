@@ -1080,7 +1080,11 @@ wss.on('connection', (ws, req) => {
   ws.on('error', () => global.mcWsClients.delete(ws));
 });
 
-httpServer.listen(API_PORT, () => console.log(`🌐 API + WebSocket on port ${API_PORT} (ws path: /ws)`));
+// Wait for the accounts store (Postgres/Neon when DATABASE_URL is set, else
+// accounts.json) so the store is loaded/migrated before we accept any request.
+require('./accounts-db').whenReady().then(() => {
+  httpServer.listen(API_PORT, () => console.log(`🌐 API + WebSocket on port ${API_PORT} (ws path: /ws)`));
+});
 
 // ── Dashboard (static frontend build, if present) ────────────────────────
 // On Render the blueprint builds frontend/ too, so one service serves the
