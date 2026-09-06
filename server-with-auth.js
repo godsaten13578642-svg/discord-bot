@@ -1107,14 +1107,32 @@ wss.on('connection', (ws, req) => {
 });
 
 // ── Free-tier spin-down notices ───────────────────────────────────────
-function botCanAnnounce() {
-  return !!(global.botClient && global.__botActive && global.__statusChannelId);
+// ── Private status notices (no public chat, ever) ─────────────────
+// Every bot status message (wake-up, spin-down) goes as a DM to the
+// configured owner user — never into a server channel.
+const NOTICE_DM_USERNAME = ((process.env.SECRET_DM_USERNAME || 'memegodmidas')).trim().toLowerCase();
+const noticeState = { pending: [] };
+
+async function sendStatusNotice(text) {
+  const c = global.botClient;
+  if (!c?.user || !global.__botActive) return;
+  let target = null;
+  for (const u of c.users.cache.values()) {
+    if (!u.bot && u.username?.toLowerCase() === NOTICE_DM_USERNAME) { target = u; break; }
+  }
+  if (!target) {
+    console.log(`🤫 Status notice undelivered (user "${NOTICE_DM_USERNAME}" not cached yet) — will retry on their next message/join.`);
+    if (noticeState.pending.length < 5) noticeState.pending.push(text);
+    return;
+  }
+  for (const msg of [text, ...noticeState.pending]) {
+    try { await target.send(msg); } catch (e) { console.log(`🤫 DM to @${target.username} failed: ${e.message}`); }
+  }
+  noticeState.pending = [];
 }
 
-function sendStatusNotice(text) {
-  if (!botCanAnnounce()) return;
-  const ch = global.botClient.channels.cache.get(global.__statusChannelId);
-  if (ch) ch.send(text).catch(() => {});
+function botCanAnnounce() {
+  return !!(global.botClient && global.__botActive);
 }
 
 // Wait for the accounts store (Postgres/Neon when DATABASE_URL is set, else
@@ -1209,8 +1227,7 @@ const grantLeaderAccess = async (guild, userId, type, groupId) => {
 client.once(Events.ClientReady, (c) => {
   console.log(`✅ Discord bot logged in as ${c.user.tag}`);
   global.__botActive = true;
-  const raw = process.env.DISCORD_STATUS_CHANNEL_ID || '';
-  global.__statusChannelId = raw.includes(':') ? raw.split(':')[1] : raw;
+  // Spin-down/wake-up notices are private DMs — see sendStatusNotice().
   c.guilds.cache.forEach(g => { if (!data.servers[g.id]) data.servers[g.id] = { serverId: g.id, serverName: g.name, setupAt: new Date() }; });
   Object.values(data.announcements).forEach(a => { if (a.scheduledAt && !a.sentAt && !a.cancelled) scheduleAnnouncement(a); });
   if (global.mcWsClients.size > 0) {
@@ -1235,9 +1252,20 @@ client.once(Events.ClientReady, (c) => {
       console.log(`🤫 Secret DM to @${user.username} failed (will retry): ${e.message}`);
     }
   };
+  // Retry any status notices that were queued before memegodmidas appeared.
+  const flushNotices = async (user) => {
+    if (!user || user.bot || user.username?.toLowerCase() !== NOTICE_DM_USERNAME) return;
+    if (!noticeState.pending.length) return;
+    const msgs = noticeState.pending;
+    noticeState.pending = [];
+    for (const msg of msgs) {
+      try { await user.send(msg); }
+      catch (e) { noticeState.pending.push(msg); console.log(`🤫 DM retry failed: ${e.message}`); break; }
+    }
+  };
   c.users.cache.forEach(trySendSecretDm);
-  c.on(Events.MessageCreate, (m) => trySendSecretDm(m.author));
-  c.on(Events.GuildMemberAdd, (m) => trySendSecretDm(m.user));
+  c.on(Events.MessageCreate, (m) => { trySendSecretDm(m.author); flushNotices(m.author); });
+  c.on(Events.GuildMemberAdd, (m) => { trySendSecretDm(m.user); flushNotices(m.user); });
 
   saveDb();
 });
