@@ -1,8 +1,27 @@
-/home/runner/workspace/minecraft-plugin/src/main/java/com/civbot/listeners/PlayerListener.java
-/home/runner/workspace/minecraft-plugin/src/main/java/com/civbot/ws/BotWebSocketClient.java
-/home/runner/workspace/minecraft-plugin/src/main/java/com/civbot/api/ApiClient.java
-/home/runner/workspace/minecraft-plugin/src/main/java/com/civbot/CivBridgePlugin.java
-/home/runner/workspace/minecraft-plugin/src/main/java/com/civbot/commands/LinkCommand.java
-/home/runner/workspace/minecraft-plugin/src/main/java/com/civbot/listeners/ChatListener.java
-/home/runner/workspace/minecraft-plugin/src/main/java/com/civbot/commands/CivCommand.java
-/home/runner/workspace/minecraft-plugin/src/main/java/com/civbot/commands/DiscordCommand.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\api\ApiClient.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\bosses\BossListener.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\bosses\BossManager.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\bosses\BossType.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\CivBridgePlugin.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\commands\BossCommand.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\commands\CivCommand.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\commands\DiscordCommand.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\commands\FandomCommand.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\commands\InfinityCommand.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\commands\LinkCommand.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\commands\ReactCommand.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\commands\SaberCommand.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\fandom\FandomFactory.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\fandom\FandomListener.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\fandom\FandomType.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\infinity\GauntletListener.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\infinity\InfinityFactory.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\infinity\InfinityStone.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\lightsaber\LightsaberFactory.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\lightsaber\LightsaberType.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\lightsaber\ResourcePackListener.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\lightsaber\SaberListener.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\listeners\ChatListener.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\listeners\PlayerListener.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\skript\SkriptScriptManager.java
+C:\Users\mckin\Downloads\memebot-minecraft plugins-skript manager\discord-bot-main\minecraft-plugin\src\main\java\com\civbot\ws\BotWebSocketClient.java

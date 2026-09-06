@@ -2,6 +2,7 @@
 # Connect your Minecraft server to the Civilization Discord Bot
 
 # Base URL of your Civilization Bot API (no trailing slash)
+# On Render this is your backend service URL, e.g. https://civbot-api.onrender.com
 # Example: https://yourproject.replit.app or http://localhost:3001
 api-url: "http://localhost:3001"
 
@@ -18,6 +19,66 @@ bridge-channel-id: ""
 
 # Prefix shown in Minecraft for Discord messages
 discord-prefix: "§9[Discord]§r"
+
+# ── /react (Skript manager) ─────────────────────────────────────────────────
+# Public base URL used when building error-report links shown to admins.
+# Should point at the same server as api-url (no trailing slash).
+# Leave empty to fall back to api-url.
+public-url: ""
+
+# Seconds an error-report page stays viewable before it expires (0 = never)
+error-report-expiry-seconds: 3600
+
+# ── Lightsabers ─────────────────────────────────────────────────────────────
+lightsabers:
+  # Log every saber hit to the console (debugging)
+  log-hits: false
+
+# ── Infinity Stones & Gauntlet ───────────────────────────────────────────────
+# Given only via /infinity (admin). Stones socket into the gauntlet; all six
+# unlock the Snap. Powers respect these toggles:
+infinity:
+  # Let gauntlet powers target other players (Reality levitation, Power
+  # knockback, the Snap). False = powers only affect mobs.
+  allow-pvp-powers: true
+  # Broadcast "<player> snapped their fingers…" to the whole server
+  broadcast-snap: true
+
+# ── Fandom Items (Parkour Civ / Naruto / Supernatural) ───────────────────────
+# Given via /fandom (admin). The Colt's one-shot kill respects this toggle:
+fandom:
+  # If false, The Colt only wounds players (10 dmg) instead of one-shotting,
+  # and other lethal effects fall back to plain damage vs players.
+  allow-pvp: true
+
+# ── Fandom Bosses (/boss, admin) ─────────────────────────────────────────────
+# The Twelve Kizuki demon (Naruto) and the Leviathan (Supernatural). Spawning
+# is broadcast to the whole server; loot drops on death.
+bosses:
+  # Leviathan: how hard non-slayer weapons hit it (0.15 = 15% of normal).
+  # Angel Blade / First Blade / Death's Scythe / gauntlet always hit at full.
+  leviathan-conventional-resistance: 0.15
+  # Kizuki demon: damage multiplier for the slayer's blades (Chidori, Rasengan,
+  # First Blade, Angel Blade).
+  kizuki-slayer-bonus: 1.5
+  # bonus fandom items only drop when the killing blow was a fandom weapon
+  fandom-loot-requires-fandom-kill: true
+  # announce spawns in chat
+  broadcast-spawns: true
+
+# ── Resource Pack (lightsaber models) ───────────────────────────────────────
+# The pack with all custom item models ships inside CivBridge-1.1.0.jar
+# (civbridge-pack/ → extract or use the ready-made zip in minecraft-plugin/resource-pack/).
+# Host the zip anywhere HTTPS and set the URL here — players get prompted on join.
+# Easiest option: your bot service now serves the newest pack itself at /downloads/pack
+# (also downloadable from the dashboard's Minecraft tab). Example:
+#   url: "https://civbot-api.onrender.com/downloads/pack"
+resource-pack:
+  url: ""
+  # SHA-1 of the zip (lets clients cache it). If empty and url is a local file
+  # path, CivBridge hashes it for you. The dashboard's Downloads card shows the
+  # current SHA-1 to paste here.
+  sha1: ""
 
 # Prefix shown in Discord for Minecraft messages
 mc-prefix: "[MC]"

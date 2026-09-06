@@ -15,11 +15,18 @@ import java.util.logging.Level;
 public class ApiClient {
 
     private final String baseUrl;
+    private final String publicUrl;
     private final String apiKey;
     private final Gson gson = new Gson();
 
     public ApiClient(String baseUrl, String apiKey) {
+        this(baseUrl, null, apiKey);
+    }
+
+    public ApiClient(String baseUrl, String publicUrl, String apiKey) {
         this.baseUrl  = baseUrl.replaceAll("/$", "");
+        this.publicUrl = (publicUrl == null || publicUrl.isBlank())
+            ? this.baseUrl : publicUrl.replaceAll("/$", "");
         this.apiKey   = apiKey;
     }
 
@@ -114,5 +121,46 @@ public class ApiClient {
 
     public JsonObject getLinkedProfile(String discordId) {
         return get("/api/mc/profile/" + discordId);
+    }
+
+    // ── Error reports (/react) ─────────────────────────────────────────────
+
+    /**
+     * Uploads a Skript error report and returns a short-lived URL the admin can
+     * open to read the full report, or null if the API could not be reached.
+     */
+    public String postErrorReport(String title, String scriptName, String action,
+                                  com.civbot.skript.SkriptScriptManager.ScriptResult result) {
+        try {
+            java.util.List<java.util.Map<String, Object>> issues = new java.util.ArrayList<>();
+            for (com.civbot.skript.SkriptScriptManager.ScriptIssue issue : result.issues()) {
+                java.util.Map<String, Object> m = new java.util.HashMap<>();
+                m.put("level", issue.level());
+                m.put("file", issue.file());
+                m.put("line", issue.line());
+                m.put("message", issue.message());
+                issues.add(m);
+            }
+            JsonObject res = post("/api/errors", Map.of(
+                "title", title,
+                "source", "skript-" + action,
+                "script", scriptName,
+                "errorCount", result.errorCount(),
+                "issues", issues
+            ));
+            if (res != null && res.has("url") && !res.get("url").isJsonNull()) {
+                String token = res.has("token") && !res.get("token").isJsonNull()
+                    ? res.get("token").getAsString() : null;
+                String path = res.has("path") && !res.get("path").isJsonNull()
+                    ? res.get("path").getAsString() : null;
+                if (token != null) return publicUrl + "/errors/" + token;
+                if (path != null) return publicUrl + path;
+                return res.get("url").getAsString();
+            }
+        } catch (Exception e) {
+            CivBridgePlugin.getInstance().getLogger().log(Level.WARNING,
+                "Could not upload error report: " + e.getMessage());
+        }
+        return null;
     }
 }

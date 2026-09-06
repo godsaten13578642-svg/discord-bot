@@ -1,0 +1,32 @@
+{
+  "parent": "minecraft:item/handheld",
+  "textures": {
+    "layer0": "minecraft:item/netherite_shovel"
+  },
+  "overrides": [
+    {
+      "predicate": {
+        "custom_model_data": 3101
+      },
+      "model": "civbridge:item/fandom/ninja_star"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 3102
+      },
+      "model": "civbridge:item/fandom/rasengan"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 3103
+      },
+      "model": "civbridge:item/fandom/chidori_blade"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 3104
+      },
+      "model": "civbridge:item/fandom/angel_blade"
+    }
+  ]
+}

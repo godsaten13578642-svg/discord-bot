@@ -1,0 +1,41 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:custom_model_data",
+    "index": 0,
+    "cases": [
+      {
+        "when": "civbridge:fandom_ninja_star",
+        "model": {
+          "type": "minecraft:model",
+          "model": "civbridge:item/fandom/ninja_star"
+        }
+      },
+      {
+        "when": "civbridge:fandom_rasengan",
+        "model": {
+          "type": "minecraft:model",
+          "model": "civbridge:item/fandom/rasengan"
+        }
+      },
+      {
+        "when": "civbridge:fandom_chidori_blade",
+        "model": {
+          "type": "minecraft:model",
+          "model": "civbridge:item/fandom/chidori_blade"
+        }
+      },
+      {
+        "when": "civbridge:fandom_angel_blade",
+        "model": {
+          "type": "minecraft:model",
+          "model": "civbridge:item/fandom/angel_blade"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "minecraft:item/netherite_shovel"
+    }
+  }
+}

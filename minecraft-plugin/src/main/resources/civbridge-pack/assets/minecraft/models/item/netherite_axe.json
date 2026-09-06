@@ -1,0 +1,44 @@
+{
+  "parent": "minecraft:item/handheld",
+  "textures": {
+    "layer0": "minecraft:item/netherite_axe"
+  },
+  "overrides": [
+    {
+      "predicate": {
+        "custom_model_data": 2001
+      },
+      "model": "civbridge:item/infinity/stone_space"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 2002
+      },
+      "model": "civbridge:item/infinity/stone_mind"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 2003
+      },
+      "model": "civbridge:item/infinity/stone_reality"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 2004
+      },
+      "model": "civbridge:item/infinity/stone_power"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 2005
+      },
+      "model": "civbridge:item/infinity/stone_time"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 2006
+      },
+      "model": "civbridge:item/infinity/stone_soul"
+    }
+  ]
+}

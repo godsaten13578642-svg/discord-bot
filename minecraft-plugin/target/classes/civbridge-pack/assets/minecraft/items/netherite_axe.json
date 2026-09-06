@@ -1,0 +1,55 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:custom_model_data",
+    "index": 0,
+    "cases": [
+      {
+        "when": "civbridge:infinity_stone_space",
+        "model": {
+          "type": "minecraft:model",
+          "model": "civbridge:item/infinity/stone_space"
+        }
+      },
+      {
+        "when": "civbridge:infinity_stone_mind",
+        "model": {
+          "type": "minecraft:model",
+          "model": "civbridge:item/infinity/stone_mind"
+        }
+      },
+      {
+        "when": "civbridge:infinity_stone_reality",
+        "model": {
+          "type": "minecraft:model",
+          "model": "civbridge:item/infinity/stone_reality"
+        }
+      },
+      {
+        "when": "civbridge:infinity_stone_power",
+        "model": {
+          "type": "minecraft:model",
+          "model": "civbridge:item/infinity/stone_power"
+        }
+      },
+      {
+        "when": "civbridge:infinity_stone_time",
+        "model": {
+          "type": "minecraft:model",
+          "model": "civbridge:item/infinity/stone_time"
+        }
+      },
+      {
+        "when": "civbridge:infinity_stone_soul",
+        "model": {
+          "type": "minecraft:model",
+          "model": "civbridge:item/infinity/stone_soul"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "minecraft:item/netherite_axe"
+    }
+  }
+}

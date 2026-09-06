@@ -156,6 +156,7 @@ export default function App() {
   const [mcStatus, setMcStatus] = useState(null);
   const [mcCmd, setMcCmd] = useState('');
   const [mcBroadcast, setMcBroadcast] = useState('');
+  const [downloads, setDownloads] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [promoteForm, setPromoteForm] = useState({ userId: '', serverId: '' });
   const [addServerForm, setAddServerForm] = useState({ serverId: '', serverName: '' });
@@ -208,6 +209,11 @@ export default function App() {
     if (s) setMcStatus(s);
   }, []);
 
+  const loadDownloads = useCallback(async () => {
+    const d = await api('/api/downloads').catch(() => null);
+    if (d) setDownloads(d);
+  }, []);
+
   const load = useCallback(async () => {
     try {
       const featureUrl = selectedServerId ? `/api/features?serverId=${selectedServerId}` : '/api/features';
@@ -229,8 +235,9 @@ export default function App() {
     } catch (_) {}
     loadAnnouncements();
     loadMcStatus();
+    loadDownloads();
     loadAccounts();
-  }, [loadAnnouncements, loadMcStatus, loadAccounts, selectedServerId]);
+  }, [loadAnnouncements, loadMcStatus, loadDownloads, loadAccounts, selectedServerId]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -845,6 +852,57 @@ export default function App() {
                   showToast(r.error ? r.error : '📢 Broadcast sent!', !r.error);
                   if (!r.error) setMcBroadcast('');
                 }}>📢 Broadcast</Btn>
+              </div>
+
+              {/* Downloads */}
+              <div style={S.card}>
+                <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>⬇️ Downloads</h3>
+                <p style={{ margin: '0 0 12px', fontSize: 12, color: '#aaa' }}>
+                  The newest CivBridge plugin jar and resource pack, served straight from this deploy.
+                </p>
+                {downloads && !downloads.plugin && !downloads.pack && (
+                  <EmptyState icon="📦" text="No artifacts staged yet — run node tools/stage_artifacts.mjs in minecraft-plugin/" />
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+                  {downloads?.plugin && (
+                    <div style={{ border: '1.5px solid #eee', borderRadius: 8, padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>☕ CivBridge Plugin</div>
+                        <Badge color="#dcfce7" textColor="#166534">v{downloads.plugin.version}</Badge>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#888' }}>
+                        {downloads.plugin.size} · built {downloads.plugin.builtAt ? new Date(downloads.plugin.builtAt).toLocaleDateString() : '—'}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#bbb', fontFamily: 'monospace' }} title={downloads.plugin.sha1}>
+                        sha1 {downloads.plugin.sha1?.slice(0, 16)}…
+                      </div>
+                      <a href={downloads.plugin.url} download style={{ background: '#0d6efd', color: 'white', borderRadius: 6, padding: '7px 14px', fontSize: 13, fontWeight: 600, textAlign: 'center', textDecoration: 'none', cursor: 'pointer' }}>
+                        ⬇ Download CivBridge.jar
+                      </a>
+                      <div style={{ fontSize: 11, color: '#bbb' }}>Drop it into your server's <code>plugins/</code> folder.</div>
+                    </div>
+                  )}
+                  {downloads?.pack && (
+                    <div style={{ border: '1.5px solid #eee', borderRadius: 8, padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>🎨 CivBridge Resource Pack</div>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#888' }}>
+                        {downloads.pack.size} · updated {downloads.pack.updatedAt ? new Date(downloads.pack.updatedAt).toLocaleDateString() : '—'} · sabers, infinity & fandom items
+                      </div>
+                      <div style={{ fontSize: 11, color: '#bbb', fontFamily: 'monospace' }} title={downloads.pack.sha1}>
+                        sha1 {downloads.pack.sha1?.slice(0, 16)}…
+                      </div>
+                      <a href={downloads.pack.url} download style={{ background: '#7c3aed', color: 'white', borderRadius: 6, padding: '7px 14px', fontSize: 13, fontWeight: 600, textAlign: 'center', textDecoration: 'none', cursor: 'pointer' }}>
+                        ⬇ Download civbridge-pack.zip
+                      </a>
+                      <div style={{ fontSize: 11, color: '#bbb' }}>
+                        Or skip the file: point <code>resource-pack.url</code> at <code>{window.location.origin}/downloads/pack</code>
+                        and paste the SHA-1 into <code>resource-pack.sha1</code>.
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>

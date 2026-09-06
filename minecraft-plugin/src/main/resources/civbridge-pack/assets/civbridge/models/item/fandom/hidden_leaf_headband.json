@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "civbridge:item/fandom/hidden_leaf_headband"
+  }
+}

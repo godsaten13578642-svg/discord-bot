@@ -1,34 +1,47 @@
+# ── Render Blueprint ──────────────────────────────────────────────────────────
+# Deploys the Civilization Bot as a single web service (API + WebSocket + bot)
+# plus an optional dashboard. Deploy via Render Dashboard → New → Blueprint.
+#
+# After the first deploy:
+#   1. Open the civbot service → Environment tab
+#   2. Set DISCORD_BOT_TOKEN (and optionally DISCORD_CLIENT_ID)
+#   3. The service restarts automatically and the bot comes online
+#
+# The plugin's config.yml should then point at this service:
+#   api-url: "https://civbot-api.onrender.com"   (your actual service URL)
+#   ws-url:   "wss://civbot-api.onrender.com/ws"
+#   api-key:  (same value as MC_API_KEY below)
+#
+# render.yaml also accepts sync:false env vars — Render prompts you for
+# DISCORD_BOT_TOKEN when you apply the blueprint, so it's set from day one.
+
 services:
+  # Single service: Express API + WebSocket bridge + Discord bot + dashboard +
+  # error-report pages. Web service (not worker) so Render gives us a public URL
+  # for the plugin and free-tier health checks/keep-alive work.
   - type: web
-    name: civilization-bot-backend
-    env: docker
+    name: civbot-api
+    runtime: node
     region: oregon
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
-    plan: free
+    plan: starter
+    rootDir: .
+    buildCommand: npm install --omit=dev && cd frontend && npm install --legacy-peer-deps && npm run build && cd .. && node minecraft-plugin/tools/stage_artifacts.mjs
+    startCommand: node server.js
+    healthCheckPath: /health
+    autoDeploy: true
     envVars:
-      - key: PORT
-        value: 5000
       - key: NODE_ENV
         value: production
-      - key: DATABASE_URL
-        fromDatabase:
-          name: civilization-db
-          property: connectionString
-    
-  - type: web
-    name: civilization-bot-frontend
-    env: docker
-    region: oregon
-    dockerfilePath: ./frontend/Dockerfile
-    dockerContext: ./frontend
-    plan: free
-    envVars:
-      - key: REACT_APP_API_URL
-        value: https://civilization-bot-backend.onrender.com
-
-databases:
-  - name: civilization-db
-    databaseName: civilization_bot
-    region: oregon
-    plan: free
+      - key: NODE_VERSION
+        value: "20"
+      - key: DISCORD_BOT_TOKEN
+        sync: false          # Render prompts for this when applying the blueprint
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: MC_API_KEY
+        generateValue: true  # auto-generate a strong key shared with the plugin
+      - key: JWT_SECRET
+        generateValue: true
+  #
+  # The dashboard is served by the same service (see server.js static section),
+  # so there is no separate frontend service needed.

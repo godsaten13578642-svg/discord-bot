@@ -818,6 +818,98 @@ const mcAuth = (req, res, next) => {
 const MC_LOG_MAX = 100;
 const pushMcLog = (arr, entry) => { arr.push(entry); if (arr.length > MC_LOG_MAX) arr.shift(); };
 
+// ── Error Reports (from the Minecraft plugin's /react command) ───────────────
+// The plugin POSTs a Skript error report and gets back a short URL. Anyone with
+// the URL can view the report as a plain HTML page — no dashboard login needed.
+const errorReports = new Map(); // token -> { title, source, script, errorCount, issues, createdAt, expiresAt }
+const ERROR_TOKEN_MAX = 100;
+
+function cleanErrorToken() {
+  const now = Date.now();
+  for (const [token, r] of errorReports) {
+    if (r.expiresAt && r.expiresAt < now) errorReports.delete(token);
+  }
+  while (errorReports.size >= ERROR_TOKEN_MAX) {
+    errorReports.delete(errorReports.keys().next().value);
+  }
+}
+
+app.post('/api/errors', mcAuth, (req, res) => {
+  const { title, source, script, errorCount, issues } = req.body || {};
+  if (!Array.isArray(issues)) return res.status(400).json({ error: 'issues array required' });
+  cleanErrorToken();
+  const token = require('crypto').randomBytes(16).toString('hex');
+  const expirySeconds = Number(req.body.expiry || 3600);
+  errorReports.set(token, {
+    title: String(title || 'Error report').slice(0, 200),
+    source: String(source || 'unknown').slice(0, 100),
+    script: String(script || '').slice(0, 200),
+    errorCount: Number(errorCount) || 0,
+    issues: issues.slice(0, 200).map(i => ({
+      level: String(i.level || 'error').slice(0, 20),
+      file: String(i.file || '').slice(0, 300),
+      line: Number(i.line) || -1,
+      message: String(i.message || '').slice(0, 4000),
+    })),
+    createdAt: new Date().toISOString(),
+    expiresAt: expirySeconds > 0 ? Date.now() + expirySeconds * 1000 : null,
+  });
+  res.json({ success: true, token, path: `/errors/${token}` });
+});
+
+app.get('/api/errors/:token', (req, res) => {
+  const report = errorReports.get(req.params.token);
+  if (!report) return res.status(404).json({ error: 'Report not found or expired' });
+  res.json(report);
+});
+
+const escapeHtml = (s) => String(s)
+  .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+
+app.get('/errors/:token', (req, res) => {
+  const report = errorReports.get(req.params.token);
+  if (!report) {
+    res.status(404).type('html').send(
+      '<!doctype html><html><head><meta charset="utf-8"><title>Error report</title></head>' +
+      '<body style="font-family:system-ui;background:#111;color:#eee;text-align:center;padding-top:4rem">' +
+      '<h1>Report not found</h1><p>This error report does not exist or has expired.</p></body></html>');
+    return;
+  }
+  const rows = report.issues.map(i => {
+    const isError = i.level === 'error';
+    const color = isError ? '#ff6b6b' : '#f7b731';
+    const where = i.line > 0 ? `${escapeHtml(i.file)} — line ${i.line}` : escapeHtml(i.file);
+    return `<div style="border-left:4px solid ${color};background:#1b1b1b;margin:10px 0;padding:10px 14px;border-radius:6px">`
+      + `<div style="font-size:12px;color:${color};font-weight:600;margin-bottom:4px">${isError ? 'ERROR' : 'WARNING'} · ${where}</div>`
+      + `<pre style="white-space:pre-wrap;word-break:break-word;margin:0;font-size:13.5px;color:#ddd;font-family:ui-monospace,Consolas,monospace">${escapeHtml(i.message)}</pre></div>`;
+  }).join('');
+  const expiryNote = report.expiresAt
+    ? `<p style="color:#888;font-size:12px">This page expires at ${new Date(report.expiresAt).toLocaleString()}.</p>`
+    : '';
+  res.type('html').send(
+    '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+    + `<title>${escapeHtml(report.title)}</title></head>`
+    + '<body style="font-family:system-ui;background:#111;color:#eee;max-width:860px;margin:0 auto;padding:2rem 1rem">'
+    + `<h1 style="font-size:22px;margin-bottom:2px">${escapeHtml(report.title)}</h1>`
+    + `<p style="color:#888;margin-top:0">source: ${escapeHtml(report.source)}`
+    + (report.script ? ` · script: <b>${escapeHtml(report.script)}</b>` : '')
+    + ` · ${report.errorCount} error(s) · created ${new Date(report.createdAt).toLocaleString()}</p>`
+    + rows
+    + expiryNote
+    + '</body></html>');
+});
+
+// Keep-alive for Render free tier — pings this service every 10 minutes so it
+// doesn't spin down (free web services sleep after 15 min without traffic).
+if (process.env.RENDER_EXTERNAL_URL) {
+  const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL || `${process.env.RENDER_EXTERNAL_URL}/health`;
+  setInterval(() => {
+    fetch(KEEP_ALIVE_URL).catch(() => {});
+  }, 10 * 60 * 1000).unref();
+  console.log(`⏰ Keep-alive ping enabled → ${KEEP_ALIVE_URL}`);
+}
+
 app.get('/api/mc/status', (_, res) => res.json(data.mcServer));
 
 app.post('/api/mc/chat', mcAuth, (req, res) => {
@@ -989,6 +1081,58 @@ wss.on('connection', (ws, req) => {
 });
 
 httpServer.listen(API_PORT, () => console.log(`🌐 API + WebSocket on port ${API_PORT} (ws path: /ws)`));
+
+// ── Dashboard (static frontend build, if present) ────────────────────────
+// On Render the blueprint builds frontend/ too, so one service serves the
+// dashboard, the API, the WebSocket bridge, and the error-report pages.
+const path = require('path');
+
+// ── Downloads (plugin jar + resource pack) ────────────────────────────────
+// Serves the newest artifacts staged by minecraft-plugin/tools/stage_artifacts.mjs
+// from minecraft-plugin/artifacts/. Public on purpose: Minecraft servers can't
+// send bearer headers, and the plugin's resource-pack.fetch needs a plain URL.
+// Registered BEFORE the dashboard static/SPA fallback below, which would
+// otherwise answer /downloads/* with index.html.
+const downloadsDir = path.join(__dirname, 'minecraft-plugin', 'artifacts');
+function readDownloadsManifest() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(downloadsDir, 'manifest.json'), 'utf8'));
+  } catch (_) {
+    return { generatedAt: null, plugin: null, pack: null };
+  }
+}
+
+app.get('/api/downloads', (_, res) => {
+  const m = readDownloadsManifest();
+  res.json({
+    plugin: m.plugin ? { version: m.plugin.version, size: m.plugin.size, sha1: m.plugin.sha1, url: '/downloads/plugin', builtAt: m.plugin.builtAt } : null,
+    pack: m.pack ? { size: m.pack.size, sha1: m.pack.sha1, url: '/downloads/pack', updatedAt: m.pack.updatedAt } : null,
+    generatedAt: m.generatedAt,
+  });
+});
+
+app.get('/downloads/plugin', (_, res) => {
+  const m = readDownloadsManifest();
+  if (!m.plugin) return res.status(404).send('Plugin jar not staged yet — run minecraft-plugin/tools/stage_artifacts.mjs');
+  res.download(path.join(downloadsDir, m.plugin.file), 'CivBridge.jar');
+});
+
+app.get('/downloads/pack', (_, res) => {
+  const m = readDownloadsManifest();
+  if (!m.pack) return res.status(404).send('Resource pack not staged yet — run minecraft-plugin/tools/stage_artifacts.mjs');
+  res.download(path.join(downloadsDir, m.pack.file), 'civbridge-pack.zip');
+});
+
+const dashboardDir = path.join(__dirname, 'frontend', 'build');
+if (fs.existsSync(path.join(dashboardDir, 'index.html'))) {
+  app.use(express.static(dashboardDir));
+  // SPA fallback for client-side routes — only for GETs that aren't API/WS/errors.
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api/') || req.path === '/health' || req.path.startsWith('/errors/')) return next();
+    res.sendFile(path.join(dashboardDir, 'index.html'));
+  });
+  console.log('🖥️ Dashboard build found — serving frontend/build');
+}
 
 // ── Discord Bot ────────────────────────────────────────────────────────────────
 const token = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;

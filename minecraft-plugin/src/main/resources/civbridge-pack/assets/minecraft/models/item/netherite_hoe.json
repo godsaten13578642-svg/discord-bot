@@ -1,0 +1,26 @@
+{
+  "parent": "minecraft:item/handheld",
+  "textures": {
+    "layer0": "minecraft:item/netherite_hoe"
+  },
+  "overrides": [
+    {
+      "predicate": {
+        "custom_model_data": 3201
+      },
+      "model": "civbridge:item/fandom/first_blade"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 3202
+      },
+      "model": "civbridge:item/fandom/deaths_scythe"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 3203
+      },
+      "model": "civbridge:item/fandom/the_colt"
+    }
+  ]
+}

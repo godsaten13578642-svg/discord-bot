@@ -1,10 +1,11 @@
 name: CivBridge
-version: '1.0.0'
+version: '1.1.0'
 main: com.civbot.CivBridgePlugin
 api-version: '1.21'
 description: Minecraft ↔ Discord bridge for Civilization Bot
 authors: [CivBot]
 website: ''
+softdepend: [Skript]
 
 commands:
   link:
@@ -24,8 +25,43 @@ commands:
     description: Reload CivBridge config
     usage: /civreload
     permission: civbridge.admin
+  react:
+    description: Reload, disable or enable a Skript file
+    usage: /react <reload|disable|enable> <script>
+    permission: civbridge.react
+  saber:
+    description: Give a custom lightsaber
+    usage: /saber <type> [player]
+    permission: civbridge.saber
+  infinity:
+    description: Give Infinity Stones and the Infinity Gauntlet (admin only)
+    usage: /infinity <stone|gauntlet> [name] [player]
+    permission: civbridge.infinity
+  fandom:
+    description: Give custom fandom items (Parkour Civ, Naruto, Supernatural)
+    usage: /fandom <item> [player]
+    permission: civbridge.fandom
+  boss:
+    description: Spawn the custom fandom bosses (Twelve Kizuki demon, Leviathan)
+    usage: /boss <id> [player]
+    permission: civbridge.boss
 
 permissions:
   civbridge.admin:
     description: Access to admin commands
+    default: op
+  civbridge.react:
+    description: Reload/disable/enable Skript files via /react
+    default: op
+  civbridge.saber:
+    description: Give custom lightsabers via /saber
+    default: op
+  civbridge.infinity:
+    description: Give Infinity Stones and the Gauntlet via /infinity
+    default: op
+  civbridge.fandom:
+    description: Give custom fandom items via /fandom
+    default: op
+  civbridge.boss:
+    description: Spawn custom fandom bosses via /boss
     default: op

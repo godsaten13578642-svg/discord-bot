@@ -1,0 +1,41 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:custom_model_data",
+    "index": 0,
+    "cases": [
+      {
+        "when": "civbridge:fandom_parkour_boots",
+        "model": {
+          "type": "minecraft:model",
+          "model": "civbridge:item/fandom/parkour_boots"
+        }
+      },
+      {
+        "when": "civbridge:fandom_no_scope_eyes",
+        "model": {
+          "type": "minecraft:model",
+          "model": "civbridge:item/fandom/no_scope_eyes"
+        }
+      },
+      {
+        "when": "civbridge:fandom_hidden_leaf_headband",
+        "model": {
+          "type": "minecraft:model",
+          "model": "civbridge:item/fandom/hidden_leaf_headband"
+        }
+      },
+      {
+        "when": "civbridge:fandom_summoning_scroll",
+        "model": {
+          "type": "minecraft:model",
+          "model": "civbridge:item/fandom/summoning_scroll"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "minecraft:item/netherite_pickaxe"
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "parent": "minecraft:item/handheld",
+  "textures": {
+    "layer0": "minecraft:item/carrot_on_a_stick"
+  },
+  "overrides": [
+    {
+      "predicate": {
+        "custom_model_data": 2101
+      },
+      "model": "civbridge:item/infinity/gauntlet_empty"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 2102
+      },
+      "model": "civbridge:item/infinity/gauntlet_space"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 2103
+      },
+      "model": "civbridge:item/infinity/gauntlet_mind"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 2104
+      },
+      "model": "civbridge:item/infinity/gauntlet_reality"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 2105
+      },
+      "model": "civbridge:item/infinity/gauntlet_power"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 2106
+      },
+      "model": "civbridge:item/infinity/gauntlet_time"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 2107
+      },
+      "model": "civbridge:item/infinity/gauntlet_soul"
+    }
+  ]
+}
