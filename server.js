@@ -951,10 +951,12 @@ if (process.env.RENDER_EXTERNAL_URL) {
       .catch(() => {
         console.log('⚠️  Keep-alive ping failed — service is likely spinning down; showing reconnecting status.');
         if (global.botClient?.user) {
-          global.botClient.user.setPresence({
-            status: 'dnd',
-            activities: [{ name: 'reconnecting… (API spun down)', type: 0 }],
-          }).catch(() => {});
+          try {
+            global.botClient.user.setPresence({
+              status: 'dnd',
+              activities: [{ name: 'reconnecting… (API spun down)', type: 0 }],
+            });
+          } catch (_) { /* never let presence break the service */ }
         }
       });
   }, 10 * 60 * 1000).unref();
@@ -967,13 +969,16 @@ function updateBotPresence() {
   const c = global.botClient;
   if (!c?.user || !global.__botActive) return;
   const online = global.mcWsClients.size > 0;
-  c.user.setPresence({
-    status: online ? 'online' : 'idle',
-    activities: [{
-      name: online ? `the Minecraft server (${data.mcServer.playerCount || 0} online)` : 'waiting for the Minecraft server…',
-      type: 0,
-    }],
-  }).catch(() => {});
+  try {
+    // discord.js v14: setPresence is synchronous (returns the user, not a Promise).
+    c.user.setPresence({
+      status: online ? 'online' : 'idle',
+      activities: [{
+        name: online ? `the Minecraft server (${data.mcServer.playerCount || 0} online)` : 'waiting for the Minecraft server…',
+        type: 0,
+      }],
+    });
+  } catch (_) { /* never let presence break the service */ }
 }
 setInterval(updateBotPresence, 60 * 1000).unref();
 
