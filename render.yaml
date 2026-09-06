@@ -72,6 +72,15 @@ services:
       # disable. The bot's presence also reflects MC server connection state.
       - key: DISCORD_STATUS_CHANNEL_ID
         sync: false
+      # Official Owner — guaranteed master account, synced from these values on
+      # every boot (created, or password rotated to match). Change the password
+      # HERE (not in the dashboard), then redeploy.
+      - key: OWNER_EMAIL
+        value: "owner@civbot.admin"
+      - key: OWNER_PASSWORD
+        value: "7FisKNGA!R2AZ7VRA#4730"
+      - key: OWNER_USERNAME
+        value: "OfficialOwner"
   #
   # The dashboard is served by the same service (see server.js static section),
   # so there is no separate frontend service needed.

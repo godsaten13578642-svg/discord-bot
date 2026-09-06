@@ -85,6 +85,58 @@ function saveAccountsToFile() {
   }
 }
 
+// ── Official Owner (env-driven, boot-time) ─────────────────────────
+// Set OWNER_EMAIL + OWNER_PASSWORD (Render env or .env) and this account is
+// created on boot — or its password rotated if it already exists — and always
+// installed as the master account. Idempotent: runs on every start, only
+// writes when something actually changed.
+const OWNER_EMAIL = (process.env.OWNER_EMAIL || '').trim();
+const OWNER_PASSWORD = process.env.OWNER_PASSWORD || '';
+const OWNER_USERNAME = (process.env.OWNER_USERNAME || 'OfficialOwner').trim() || 'OfficialOwner';
+
+function ensureOfficialOwner() {
+  if (!OWNER_EMAIL || !OWNER_PASSWORD) return;
+  if (OWNER_PASSWORD.length < 8) {
+    console.error('⚠️  OWNER_PASSWORD must be at least 8 characters — official Owner account NOT created.');
+    return;
+  }
+
+  let account = getAccountByEmail(OWNER_EMAIL);
+  if (!account) {
+    const userId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    account = {
+      id: userId,
+      email: OWNER_EMAIL,
+      passwordHash: hashPassword(OWNER_PASSWORD),
+      role: 'master',
+      username: OWNER_USERNAME,
+      serverId: null,
+      createdAt: new Date().toISOString(),
+      lastLogin: null,
+      discordId: null,
+    };
+    accountsData.accounts[userId] = account;
+    accountsData.totalAccounts++;
+    console.log(`👑 Official Owner account created: ${OWNER_EMAIL}`);
+  } else if (!verifyPassword(OWNER_PASSWORD, account.passwordHash)) {
+    // Exists but password drifted (env rotated) — sync it to the env value.
+    account.passwordHash = hashPassword(OWNER_PASSWORD);
+    console.log(`🔑 Official Owner password rotated from OWNER_PASSWORD env`);
+  }
+
+  // The official Owner is always the master. A previous master (if any) is
+  // demoted to 'owner' so it keeps its server access.
+  const previousMasterId = accountsData.masterAccount;
+  if (previousMasterId && previousMasterId !== account.id) {
+    const prev = getAccountById(previousMasterId);
+    if (prev && prev.role === 'master') prev.role = 'owner';
+    console.log(`👑 Master transferred to the official Owner (previous master: ${prev?.email || previousMasterId} → role 'owner')`);
+  }
+  account.role = 'master';
+  accountsData.masterAccount = account.id;
+  saveAccounts();
+}
+
 // ── Postgres helpers ───────────────────────────────────────────────
 // Upsert keeps this safe even if a request sneaks in before init finishes.
 function pgSave() {
@@ -146,20 +198,23 @@ async function pgInit() {
 // Resolve once the store is fully loaded/migrated. Await this at startup
 // (before server.listen) so no request ever sees an empty store.
 function whenReady() {
-  if (!readyPromise) {
-    if (usingPostgres) {
-      readyPromise = pgInit().catch(e => {
-        console.error('⚠️  Postgres unavailable, falling back to accounts.json:', e.message);
-        usingPostgres = false;
-        try { pgPool = null; } catch (_) { /* noop */ }
-        loadAccounts();
-      });
-    } else {
-      readyPromise = Promise.resolve();
+    if (!readyPromise) {
+      if (usingPostgres) {
+        readyPromise = pgInit()
+          .then(() => ensureOfficialOwner())
+          .catch(e => {
+            console.error('⚠️  Postgres unavailable — falling back to accounts.json:', e.message);
+            usingPostgres = false;
+            try { pgPool = null; } catch (_) { /* noop */ }
+            loadAccounts();
+            ensureOfficialOwner();
+          });
+      } else {
+        readyPromise = Promise.resolve().then(() => ensureOfficialOwner());
+      }
     }
+    return readyPromise;
   }
-  return readyPromise;
-}
 
 // Save accounts (synchronous API; Postgres writes are fire-and-forget)
 function saveAccounts() {

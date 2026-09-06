@@ -158,6 +158,20 @@ docker-compose up -d
 - Check that backend is running
 - Verify REACT_APP_API_URL in frontend/.env.local
 
+## Official Owner Account
+
+Set these environment variables (already in `render.yaml`) and the server guarantees a master account:
+
+| Variable | Value |
+|---|---|
+| `OWNER_EMAIL` | `owner@civbot.admin` |
+| `OWNER_PASSWORD` | `7FisKNGA!R2AZ7VRA#4730` |
+| `OWNER_USERNAME` | `OfficialOwner` |
+
+On every boot the server creates this account if missing, rotates its password to match the env if changed, and makes it the **master** (any previous master is demoted to `owner`, keeping server access). Log in on the dashboard with the email + password above.
+
+**To change the password:** edit `OWNER_PASSWORD` in `render.yaml` (or the Render environment) and redeploy — never change it through the dashboard, or the next boot rotates it back. Keep the value out of public repos if this repository is shared.
+
 ## Free Cloud Database (Neon) — accounts and game state survive deploys
 
 Render's free tier has **no persistent disk**, so `accounts.json` and `db.json` used to reset on every deploy. The server now supports a free [Neon](https://neon.tech) Postgres as the store for both — accounts (logins, roles) **and** game state (users, economy, civilizations, announcements, giveaways, counters, server settings):

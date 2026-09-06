@@ -17,7 +17,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'acctdb-'));
 process.chdir(tmp);
 
 const fakeDb = new Map(); // id -> payload
-if (scenario === 'existing') {
+if (scenario === 'existing' || scenario === 'owner-rotate') {
   fakeDb.set(1, {
     accounts: {
       db_user_1: {
@@ -28,6 +28,40 @@ if (scenario === 'existing') {
     },
     masterAccount: 'db_user_1',
     serverOwners: { '999': 'db_user_1' },
+    totalAccounts: 1,
+  });
+}
+if (scenario === 'owner-rotate') {
+  const stored = fakeDb.get(1);
+  stored.accounts.owner_1 = {
+    id: 'owner_1', email: 'owner@civbot.admin', passwordHash: null, role: 'master',
+    username: 'OfficialOwner', serverId: null, createdAt: new Date().toISOString(),
+    lastLogin: null, discordId: null,
+  };
+  // Hash the OLD password with the real hasher so rotation is provable.
+  process.env.OWNER_EMAIL = 'owner@civbot.admin';
+  process.env.OWNER_PASSWORD = 'NewSecret#2026';
+  const { hashPassword } = require(path.join(__dirname, '..', '..', 'auth-config.js'));
+  stored.accounts.owner_1.passwordHash = hashPassword('OldSecret#2025');
+  stored.masterAccount = 'owner_1';
+}
+if (scenario === 'owner-fresh') {
+  process.env.OWNER_EMAIL = 'owner@civbot.admin';
+  process.env.OWNER_PASSWORD = 'SuperSecret#2026';
+}
+if (scenario === 'owner-takeover') {
+  process.env.OWNER_EMAIL = 'owner@civbot.admin';
+  process.env.OWNER_PASSWORD = 'SuperSecret#2026';
+  fakeDb.set(1, {
+    accounts: {
+      first_user_1: {
+        id: 'first_user_1', email: 'first@user.dev', passwordHash: 'a:b', role: 'master',
+        username: 'First', serverId: null, createdAt: new Date().toISOString(),
+        lastLogin: null, discordId: null,
+      },
+    },
+    masterAccount: 'first_user_1',
+    serverOwners: { '555': 'first_user_1' },
     totalAccounts: 1,
   });
 }
@@ -111,6 +145,30 @@ async function main() {
     assert(!db.isUsingPostgres(), 'fell back to file mode when DB unreachable');
     assert(db.getAllAccounts().length === 1, 'file store loaded as fallback');
     assert(db.createAccount('x@y.dev', 'pw', 'X').success, 'file mode still fully functional');
+  }
+
+  if (scenario === 'owner-fresh') {
+    // Fresh DB; local file user migrates, then the env owner is created on top.
+    assert(db.getAllAccounts().length === 2, 'official Owner created alongside migrated user');
+    const acc = db.getAccountByEmail('owner@civbot.admin');
+    assert(acc && acc.role === 'master' && acc.username === 'OfficialOwner', 'official Owner is master');
+    assert(db.getMasterAccount()?.email === 'owner@civbot.admin', 'masterAccount points at official Owner');
+    assert(db.verifyLogin('owner@civbot.admin', 'SuperSecret#2026').success, 'env password logs in');
+  }
+
+  if (scenario === 'owner-rotate') {
+    // DB already has the owner with an old password; env password differs → rotated.
+    const acc = db.getAccountByEmail('owner@civbot.admin');
+    assert(acc && db.verifyLogin('owner@civbot.admin', 'NewSecret#2026').success, 'password rotated to env value');
+    assert(db.getMasterAccount()?.email === 'owner@civbot.admin', 'still master after rotation');
+  }
+
+  if (scenario === 'owner-takeover') {
+    // DB has a different master already; official Owner takes over, old master demoted.
+    assert(db.getMasterAccount()?.email === 'owner@civbot.admin', 'official Owner became master');
+    const prev = db.getAccountByEmail('first@user.dev');
+    assert(prev.role === 'owner', 'previous master demoted to owner');
+    assert(db.verifyLogin('owner@civbot.admin', 'SuperSecret#2026').success, 'owner password works');
   }
 
   console.log(`— scenario "${scenario}" done —`);
