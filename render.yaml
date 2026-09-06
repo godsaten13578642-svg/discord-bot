@@ -66,6 +66,11 @@ services:
       # back to accounts.json, which resets on every free-tier deploy.
       - key: DATABASE_URL
         sync: false
+      # Optional: channel ID (or "guildId:channelId") that gets 🟢 wake-up and
+      # 🌙 spin-down notices when the free tier sleeps/wakes. Leave empty to
+      # disable. The bot's presence also reflects MC server connection state.
+      - key: DISCORD_STATUS_CHANNEL_ID
+        sync: false
   #
   # The dashboard is served by the same service (see server.js static section),
   # so there is no separate frontend service needed.

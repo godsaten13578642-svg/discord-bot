@@ -67,14 +67,17 @@ bosses:
   broadcast-spawns: true
 
 # ── Resource Pack (lightsaber models) ───────────────────────────────────────
-# The pack with the 6 saber models ships inside CivBridge-1.1.0.jar
-# (lightsabers/ → extract or use the ready-made zip in minecraft-plugin/resource-pack/).
+# The pack with all custom item models ships inside CivBridge-1.1.0.jar
+# (civbridge-pack/ → extract or use the ready-made zip in minecraft-plugin/resource-pack/).
 # Host the zip anywhere HTTPS and set the URL here — players get prompted on join.
-# Example: serve it from your Render bot service at /packs/lightsabers.zip
+# Easiest option: your bot service now serves the newest pack itself at /downloads/pack
+# (also downloadable from the dashboard's Minecraft tab). Example:
+#   url: "https://civbot-api.onrender.com/downloads/pack"
 resource-pack:
   url: ""
   # SHA-1 of the zip (lets clients cache it). If empty and url is a local file
-  # path, CivBridge hashes it for you.
+  # path, CivBridge hashes it for you. The dashboard's Downloads card shows the
+  # current SHA-1 to paste here.
   sha1: ""
 
 # Prefix shown in Discord for Minecraft messages

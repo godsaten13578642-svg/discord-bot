@@ -48,7 +48,8 @@ const data = {
 let counters = _saved.counters || { civ: 1, religion: 1, team: 1, cult: 1, alliance: 1, event: 1, poll: 1 };
 
 const features = Object.assign({
-  commandsEnabled:       true,
+  // The Render blueprint generates MC_API_KEY — it must be authoritative when set.
+  mcApiKey:              process.env.MC_API_KEY || 'change-me-to-something-secret',
   autoRegisterMembers:   true,
   xpEnabled:             true,
   xpPerMessage:          10,
@@ -860,13 +861,41 @@ app.get('/downloads/pack', (_, res) => {
 
 // Keep-alive for Render free tier — pings this service every 10 minutes so it
 // doesn't spin down (free web services sleep after 15 min without traffic).
+// A missed ping (spin-down or network blip) flips the Discord status to a
+// visible "reconnecting" state.
 if (process.env.RENDER_EXTERNAL_URL) {
   const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL || `${process.env.RENDER_EXTERNAL_URL}/health`;
   setInterval(() => {
-    fetch(KEEP_ALIVE_URL).catch(() => {});
+    fetch(KEEP_ALIVE_URL)
+      .then(r => { if (!r.ok) throw new Error(`health responded ${r.status}`); })
+      .catch(() => {
+        console.log('⚠️  Keep-alive ping failed — service is likely spinning down; showing reconnecting status.');
+        if (global.botClient?.user) {
+          global.botClient.user.setPresence({
+            status: 'dnd',
+            activities: [{ name: 'reconnecting… (API spun down)', type: 0 }],
+          }).catch(() => {});
+        }
+      });
   }, 10 * 60 * 1000).unref();
   console.log(`⏰ Keep-alive ping enabled → ${KEEP_ALIVE_URL}`);
 }
+
+// Discord presence follows the Minecraft connection state, so the widget is
+// honest even between spin-downs.
+function updateBotPresence() {
+  const c = global.botClient;
+  if (!c?.user || !global.__botActive) return;
+  const online = global.mcWsClients.size > 0;
+  c.user.setPresence({
+    status: online ? 'online' : 'idle',
+    activities: [{
+      name: online ? `the Minecraft server (${data.mcServer.playerCount || 0} online)` : 'waiting for the Minecraft server…',
+      type: 0,
+    }],
+  }).catch(() => {});
+}
+setInterval(updateBotPresence, 60 * 1000).unref();
 
 app.get('/api/mc/status', (_, res) => res.json(data.mcServer));
 
@@ -989,6 +1018,12 @@ wss.on('connection', (ws, req) => {
   data.mcServer.online = true;
   data.mcServer.lastSeen = new Date();
   console.log('🎮 Minecraft plugin connected via WebSocket');
+  if (global.mcWsClients.size === 1) {
+    // First authenticated connection since boot/wake — usually the MC server
+    // reattaching after a free-tier spin-down.
+    sendStatusNotice('🟢 **API is back online** after a spin-down — the Minecraft server reconnected automatically.');
+  }
+  updateBotPresence();
 
   ws.on('message', (raw) => {
     let msg;
@@ -1035,6 +1070,17 @@ wss.on('connection', (ws, req) => {
 
   ws.on('error', () => global.mcWsClients.delete(ws));
 });
+
+// ── Free-tier spin-down notices ───────────────────────────────────────
+function botCanAnnounce() {
+  return !!(global.botClient && global.__botActive && global.__statusChannelId);
+}
+
+function sendStatusNotice(text) {
+  if (!botCanAnnounce()) return;
+  const ch = global.botClient.channels.cache.get(global.__statusChannelId);
+  if (ch) ch.send(text).catch(() => {});
+}
 
 // Wait for the accounts store (Postgres/Neon when DATABASE_URL is set, else
 // accounts.json) before accepting traffic.
@@ -1124,9 +1170,35 @@ const grantLeaderAccess = async (guild, userId, type, groupId) => {
 
 client.once(Events.ClientReady, (c) => {
   console.log(`✅ Discord bot logged in as ${c.user.tag}`);
+  global.__botActive = true;
+  const raw = process.env.DISCORD_STATUS_CHANNEL_ID || '';
+  global.__statusChannelId = raw.includes(':') ? raw.split(':')[1] : raw;
   c.guilds.cache.forEach(g => { if (!data.servers[g.id]) data.servers[g.id] = { serverId: g.id, serverName: g.name, setupAt: new Date() }; });
   Object.values(data.announcements).forEach(a => { if (a.scheduledAt && !a.sentAt && !a.cancelled) scheduleAnnouncement(a); });
+  if (global.mcWsClients.size > 0) {
+    sendStatusNotice('🟢 **API is back online** after a spin-down — the Minecraft server reconnected automatically.');
+  }
+  updateBotPresence();
   saveDb();
+});
+
+client.on(Events.ShardDisconnect, () => {
+  global.__botActive = false;
+  console.log('⚠️  Discord gateway lost — bot will auto-reconnect (presence pauses).');
+});
+client.on(Events.ShardResume, () => {
+  global.__botActive = true;
+  console.log('✅ Discord gateway resumed.');
+  updateBotPresence();
+});
+
+// Render sends SIGTERM on deploys/spin-down — say goodbye and close cleanly.
+process.on('SIGTERM', () => {
+  console.log('👋 SIGTERM received (deploy or spin-down) — shutting down cleanly.');
+  sendStatusNotice('🌙 **API is spinning down** (Render free tier idle or deploy). It will wake automatically on the next request — the Minecraft server will reconnect on its own.');
+  try { client.destroy(); } catch (_) {}
+  global.mcWsClients.forEach(ws => { try { ws.close(1001, 'Server restarting'); } catch (_) {} });
+  setTimeout(() => process.exit(0), 1500);
 });
 
 client.on(Events.GuildMemberAdd, async (member) => {

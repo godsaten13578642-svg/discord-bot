@@ -24,6 +24,14 @@ A keep-alive pinger is built into `server.js` (pings `/health` every 10 min when
 `RENDER_EXTERNAL_URL` is set) so the free/starter service doesn't spin down and
 drop the Minecraft WebSocket.
 
+**Free-tier spin-down notices (optional):** set `DISCORD_STATUS_CHANNEL_ID` in
+the Render environment (a channel ID, or `guildId:channelId`) and the bot posts
+🌙 when the API spins down and 🟢 when it wakes up and the Minecraft server
+reconnects. The bot's Discord presence also mirrors the MC connection
+("playing the Minecraft server (N online)" / idle while waiting). The plugin
+reconnects on its own with exponential backoff (10s → 5 min cap) — no action
+needed from you after a wake-up.
+
 ### Pointing the plugin at Render
 
 In `plugins/CivBridge/config.yml` on your Minecraft server:

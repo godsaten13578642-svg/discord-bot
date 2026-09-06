@@ -16,6 +16,12 @@ public class BotWebSocketClient extends WebSocketClient {
     private final Gson gson = new Gson();
     private volatile boolean intentionallyClosed = false;
 
+    // Reconnect backoff: 10s doubling to a 5 min ceiling. Reset on every
+    // successful open. Render's free tier sleeps the API after ~15 idle
+    // minutes, so reconnects must keep trying patiently, not give up.
+    private volatile long reconnectDelayTicks = 200L; // 200 ticks = 10s
+    private static final long MAX_RECONNECT_DELAY_TICKS = 6000L; // 5 min
+
     public BotWebSocketClient(String wsUrl, String apiKey, CivBridgePlugin plugin) {
         super(URI.create(wsUrl), Map.of("X-Api-Key", apiKey));
         this.plugin = plugin;
@@ -24,13 +30,28 @@ public class BotWebSocketClient extends WebSocketClient {
 
     public void connectAsync() {
         new Thread(() -> {
-            try { connectBlocking(); }
-            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            try {
+                boolean opened = connectBlocking();
+                if (!opened && !intentionallyClosed) {
+                    plugin.getLogger().warning("WS handshake failed — scheduling retry.");
+                    scheduleReconnect();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                // Never let one failed dial kill the retry loop (the API may be
+                // spun down for a long time on the Render free tier).
+                if (!intentionallyClosed) {
+                    plugin.getLogger().warning("WS connect error: " + e.getMessage() + " — scheduling retry.");
+                    scheduleReconnect();
+                }
+            }
         }, "civbridge-ws-connect").start();
     }
 
     @Override
     public void onOpen(ServerHandshake hs) {
+        reconnectDelayTicks = 200L; // success — reset the backoff
         plugin.getLogger().info("§aConnected to CivBot WebSocket.");
         // Identify as a Minecraft plugin
         JsonObject msg = new JsonObject();
@@ -118,7 +139,8 @@ public class BotWebSocketClient extends WebSocketClient {
     @Override
     public void onClose(int code, String reason, boolean remote) {
         if (!intentionallyClosed) {
-            plugin.getLogger().warning("§eWS disconnected (" + code + "): " + reason + " — reconnecting in 10s…");
+            plugin.getLogger().warning("§eWS disconnected (" + code + "): " + reason
+                + " — reconnecting in " + (reconnectDelayTicks / 20) + "s…");
             scheduleReconnect();
         }
     }
@@ -135,13 +157,26 @@ public class BotWebSocketClient extends WebSocketClient {
     }
 
     private void scheduleReconnect() {
+        final long delay = reconnectDelayTicks;
+        // Exponential backoff for the NEXT attempt: 10s → 20s → 40s → … → 5 min
+        reconnectDelayTicks = Math.min(reconnectDelayTicks * 2, MAX_RECONNECT_DELAY_TICKS);
         plugin.getServer().getScheduler().runTaskLaterAsynchronously(plugin, () -> {
-            if (!intentionallyClosed) {
-                plugin.getLogger().info("Attempting WS reconnect…");
-                try { reconnectBlocking(); }
-                catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            if (intentionallyClosed) return;
+            plugin.getLogger().info("Attempting WS reconnect…");
+            try {
+                if (!reconnectBlocking() && !intentionallyClosed) {
+                    plugin.getLogger().warning("WS reconnect failed — retrying with backoff.");
+                    scheduleReconnect();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                if (!intentionallyClosed) {
+                    plugin.getLogger().warning("WS reconnect error: " + e.getMessage() + " — retrying with backoff.");
+                    scheduleReconnect();
+                }
             }
-        }, 200L); // 10 seconds (200 ticks)
+        }, delay);
     }
 
     /** Send a Minecraft event to the bot server. */
