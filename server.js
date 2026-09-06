@@ -130,16 +130,45 @@ const features = new Proxy({}, {
 });
 
 // ── Save ───────────────────────────────────────────────────────────────────────
-let _saveTimer = null;
-function saveDb() {
-  clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => {
-    try { fs.writeFileSync(DB_FILE, JSON.stringify({ ...data, counters }, null, 2)); }
-    catch (e) { console.error('DB save error:', e.message); }
-  }, 1500);
-}
-// Also save on interval as safety net
-setInterval(saveDb, 30000);
+// Postgres when DATABASE_URL is set (survives deploys), else db.json.
+const stateStore = require('./state-db').createGameStateStore({
+  file: DB_FILE,
+  snapshot: () => ({ ...data, counters, savedAt: new Date().toISOString() }),
+  apply(saved) {
+    if (!saved || typeof saved !== 'object') return;
+    const safe = (obj, fallback) => (obj && typeof obj === 'object' ? obj : fallback);
+    data.servers        = safe(saved.servers, data.servers);
+    data.users          = safe(saved.users, data.users);
+    data.civilizations  = safe(saved.civilizations, data.civilizations);
+    data.religions      = safe(saved.religions, data.religions);
+    data.teams          = safe(saved.teams, data.teams);
+    data.cults          = safe(saved.cults, data.cults);
+    data.rebels         = safe(saved.rebels, data.rebels);
+    data.alliances      = safe(saved.alliances, data.alliances);
+    data.economy        = safe(saved.economy, data.economy);
+    data.titles         = safe(saved.titles, data.titles);
+    data.events         = safe(saved.events, data.events);
+    data.blackmarket    = Array.isArray(saved.blackmarket) ? saved.blackmarket : data.blackmarket;
+    data.bounties       = safe(saved.bounties, data.bounties);
+    data.polls          = safe(saved.polls, data.polls);
+    data.giveaways      = safe(saved.giveaways, data.giveaways);
+    data.announcements  = safe(saved.announcements, data.announcements);
+    data.linkedAccounts = safe(saved.linkedAccounts, data.linkedAccounts);
+    data.reverseLinks   = safe(saved.reverseLinks, data.reverseLinks);
+    data.linkCodes      = safe(saved.linkCodes, data.linkCodes);
+    data.mcServer       = { players: [], online: false, lastSeen: null, chatLog: [], eventLog: [], commandLog: [], ...(saved.mcServer || {}) };
+    data.serverFeatures = safe(saved.serverFeatures, data.serverFeatures);
+    if (Array.isArray(saved.counters)) {
+      saved.counters.forEach((v, i) => { counters[i] = v; });
+    } else if (saved.counters && typeof saved.counters === 'object') {
+      Object.assign(counters, saved.counters);
+    }
+    // Env MC_API_KEY stays authoritative over anything loaded from storage.
+    if (process.env.MC_API_KEY) setServerFeature('_global', { mcApiKey: process.env.MC_API_KEY });
+  },
+});
+
+function saveDb() { stateStore.scheduleSave(); }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const mkUser = (id) => ({
@@ -957,6 +986,10 @@ process.on('SIGTERM', () => {
   setTimeout(() => process.exit(0), 1500);
 });
 
+// Persist the very last state on shutdown (deploys must not lose writes).
+process.on('SIGTERM', () => { stateStore.flush(); });
+process.on('SIGINT', () => { stateStore.flush(); });
+
 app.get('/api/mc/status', (_, res) => res.json(data.mcServer));
 
 app.post('/api/mc/chat', mcAuth, (req, res) => {
@@ -1149,9 +1182,12 @@ function sendStatusNotice(text) {
 
 
 
-// Wait for the accounts store (Postgres/Neon when DATABASE_URL is set, else
-// accounts.json) so the store is loaded/migrated before we accept any request.
-require('./accounts-db').whenReady().then(() => {
+// Wait for both stores (Postgres/Neon when DATABASE_URL is set, else the
+// JSON files) so everything is loaded/migrated before we accept any request.
+Promise.all([
+  require('./accounts-db').whenReady(),
+  stateStore.whenReady(),
+]).then(() => {
   httpServer.listen(API_PORT, () => console.log(`🌐 API + WebSocket on port ${API_PORT} (ws path: /ws)`));
 });
 

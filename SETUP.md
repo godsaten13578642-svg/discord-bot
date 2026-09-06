@@ -158,18 +158,19 @@ docker-compose up -d
 - Check that backend is running
 - Verify REACT_APP_API_URL in frontend/.env.local
 
-## Free Cloud Database (Neon) — accounts survive deploys
+## Free Cloud Database (Neon) — accounts and game state survive deploys
 
-Render's free tier has **no persistent disk**, so `accounts.json` used to reset on every deploy. The server now supports a free [Neon](https://neon.tech) Postgres as the accounts store:
+Render's free tier has **no persistent disk**, so `accounts.json` and `db.json` used to reset on every deploy. The server now supports a free [Neon](https://neon.tech) Postgres as the store for both — accounts (logins, roles) **and** game state (users, economy, civilizations, announcements, giveaways, counters, server settings):
 
 1. Create a free project at https://neon.tech (no credit card needed).
 2. Copy the **pooled** connection string — Dashboard → Connection Details → enable "Pooled connection"; it looks like `postgresql://user:pass@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require`.
 3. On Render: your service → **Environment** → add `DATABASE_URL` = that string → save (the service redeploys automatically). With the blueprint it's already listed as a `sync: false` variable, so you can also paste it when you first apply the blueprint.
 
-On the next boot the server auto-creates its table and **migrates your local `accounts.json` into Postgres** once, if the database is empty. From then on logins, roles, and server-ownership links persist across deploys and restarts.
+On the next boot the server auto-creates its tables (`accounts_state`, `game_state`) and **migrates your local `accounts.json` and `db.json` into Postgres** once, if the database is empty. From then on logins, roles, economy, announcements, and everything else persist across deploys and restarts.
 
 Notes:
-- If `DATABASE_URL` is unset (or Neon is unreachable at boot), the bot falls back to `accounts.json` and logs the reason — nothing crashes.
+- If `DATABASE_URL` is unset (or Neon is unreachable at boot), the bot falls back to `accounts.json` + `db.json` and logs the reason — nothing crashes.
+- Both stores save through the same write path (debounced 1.5s after any change, plus a 30s safety net and a final flush on shutdown), so a deploy can drop at most the last ~1.5 seconds of writes.
 - Neon's free plan limits (~0.5 GB storage, autosuspend after idle) are far above what this store needs — it's a few KB of JSON.
 
 ## Next Steps

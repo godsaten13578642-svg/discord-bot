@@ -85,15 +85,45 @@ const features = Object.assign({
 }, _saved.features || {});
 
 // ── Save ────────────────────────────────────────────────────────────────────
-let _saveTimer = null;
-function saveDb() {
-  clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => {
-    try { fs.writeFileSync(DB_FILE, JSON.stringify({ ...data, counters, features }, null, 2)); }
-    catch (e) { console.error('DB save error:', e.message); }
-  }, 1500);
-}
-setInterval(saveDb, 30000);
+// Postgres when DATABASE_URL is set (survives deploys), else db.json.
+const stateStore = require('./state-db').createGameStateStore({
+  file: DB_FILE,
+  snapshot: () => ({ ...data, counters, features, savedAt: new Date().toISOString() }),
+  apply(saved) {
+    if (!saved || typeof saved !== 'object') return;
+    const safe = (obj, fallback) => (obj && typeof obj === 'object' ? obj : fallback);
+    data.servers        = safe(saved.servers, data.servers);
+    data.users          = safe(saved.users, data.users);
+    data.civilizations  = safe(saved.civilizations, data.civilizations);
+    data.religions      = safe(saved.religions, data.religions);
+    data.teams          = safe(saved.teams, data.teams);
+    data.cults          = safe(saved.cults, data.cults);
+    data.rebels         = safe(saved.rebels, data.rebels);
+    data.alliances      = safe(saved.alliances, data.alliances);
+    data.economy        = safe(saved.economy, data.economy);
+    data.titles         = safe(saved.titles, data.titles);
+    data.events         = safe(saved.events, data.events);
+    data.blackmarket    = Array.isArray(saved.blackmarket) ? saved.blackmarket : data.blackmarket;
+    data.bounties       = safe(saved.bounties, data.bounties);
+    data.polls          = safe(saved.polls, data.polls);
+    data.giveaways      = safe(saved.giveaways, data.giveaways);
+    data.announcements  = safe(saved.announcements, data.announcements);
+    data.linkedAccounts = safe(saved.linkedAccounts, data.linkedAccounts);
+    data.reverseLinks   = safe(saved.reverseLinks, data.reverseLinks);
+    data.linkCodes      = safe(saved.linkCodes, data.linkCodes);
+    data.mcServer       = { players: [], online: false, lastSeen: null, chatLog: [], eventLog: [], commandLog: [], ...(saved.mcServer || {}) };
+    if (Array.isArray(saved.counters)) {
+      saved.counters.forEach((v, i) => { counters[i] = v; });
+    } else if (saved.counters && typeof saved.counters === 'object') {
+      Object.assign(counters, saved.counters);
+    }
+    if (saved.features && typeof saved.features === 'object') Object.assign(features, saved.features);
+    // Env MC_API_KEY stays authoritative over anything loaded from storage.
+    if (process.env.MC_API_KEY) Object.assign(features, { mcApiKey: process.env.MC_API_KEY });
+  },
+});
+
+function saveDb() { stateStore.scheduleSave(); }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const mkUser = (id) => ({
@@ -1084,7 +1114,10 @@ function sendStatusNotice(text) {
 
 // Wait for the accounts store (Postgres/Neon when DATABASE_URL is set, else
 // accounts.json) before accepting traffic.
-require('./accounts-db').whenReady().then(() => {
+Promise.all([
+  require('./accounts-db').whenReady(),
+  stateStore.whenReady(),
+]).then(() => {
   httpServer.listen(API_PORT, () => console.log(`🌐 API + WebSocket on port ${API_PORT} (ws path: /ws)\n🔐 Authentication enabled`));
 });
 
@@ -1200,6 +1233,10 @@ process.on('SIGTERM', () => {
   global.mcWsClients.forEach(ws => { try { ws.close(1001, 'Server restarting'); } catch (_) {} });
   setTimeout(() => process.exit(0), 1500);
 });
+
+// Persist the very last state on shutdown (deploys must not lose writes).
+process.on('SIGTERM', () => { stateStore.flush(); });
+process.on('SIGINT', () => { stateStore.flush(); });
 
 client.on(Events.GuildMemberAdd, async (member) => {
   if (!features.autoRegisterMembers) return;

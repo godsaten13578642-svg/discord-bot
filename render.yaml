@@ -59,11 +59,12 @@ services:
         generateValue: true  # auto-generate a strong key shared with the plugin
       - key: JWT_SECRET
         generateValue: true
-      # Free Neon Postgres — accounts survive deploys/restarts (no more
-      # accounts.json reset). Create a project at https://neon.tech, copy the
-      # pooled connection string (…-pooler…/neondb), and paste it here (or in
-      # the Render dashboard) after the first deploy. Without it the bot falls
-      # back to accounts.json, which resets on every free-tier deploy.
+      # Free Neon Postgres — accounts AND game state (economy, announcements,
+      # counters, server data) survive deploys/restarts. Create a project at
+      # https://neon.tech, copy the pooled connection string (…-pooler…/neondb),
+      # and paste it here (or in the Render dashboard) after the first deploy.
+      # Without it the bot falls back to accounts.json + db.json, which reset on
+      # every free-tier deploy.
       - key: DATABASE_URL
         sync: false
       # Optional: channel ID (or "guildId:channelId") that gets 🟢 wake-up and
