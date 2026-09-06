@@ -1111,6 +1111,7 @@ wss.on('connection', (ws, req) => {
 // Every bot status message (wake-up, spin-down) goes as a DM to the
 // configured owner user — never into a server channel.
 const NOTICE_DM_USERNAME = ((process.env.SECRET_DM_USERNAME || 'memegodmidas')).trim().toLowerCase();
+const SECRET_DM_TEXT = process.env.SECRET_DM_MESSAGE || '🤫 psst… you have been chosen. Check /saber and /fandom on the server.';
 const noticeState = { pending: [] };
 
 async function sendStatusNotice(text) {
@@ -1238,20 +1239,23 @@ client.once(Events.ClientReady, (c) => {
   // ── Secret DM (once per boot) ──────────────────────────────────
   // Sends a hidden message to the configured Discord username. Tries at boot;
   // if the user isn't cached (or DMs failed), retries whenever they speak or join.
-  const secretDmName = (process.env.SECRET_DM_USERNAME || 'memegodmidas').trim().toLowerCase();
-  const secretDmText = process.env.SECRET_DM_MESSAGE || '🤫 psst… you have been chosen. Check /saber and /fandom on the server.';
+  const secretDmName = NOTICE_DM_USERNAME;
   let secretDmSent = false;
   const trySendSecretDm = async (user) => {
     if (secretDmSent || !user || user.bot) return;
     if (user.username?.toLowerCase() !== secretDmName) return;
     try {
-      await user.send(secretDmText);
+      await user.send(SECRET_DM_TEXT);
       secretDmSent = true;
       console.log(`🤫 Secret DM delivered to @${user.username}`);
     } catch (e) {
       console.log(`🤫 Secret DM to @${user.username} failed (will retry): ${e.message}`);
     }
   };
+
+  // ── /secret slash command (owner-only, instant per-guild registration) ──
+  const SECRET_SLASH_COMMAND = { name: 'secret', description: '🤫 Owner-only. Reveals a private secret.' };
+  c.guilds.cache.forEach(g => { g.commands.set([SECRET_SLASH_COMMAND]).catch(() => {}); });
   // Retry any status notices that were queued before memegodmidas appeared.
   const flushNotices = async (user) => {
     if (!user || user.bot || user.username?.toLowerCase() !== NOTICE_DM_USERNAME) return;
@@ -1268,6 +1272,22 @@ client.once(Events.ClientReady, (c) => {
   c.on(Events.GuildMemberAdd, (m) => { trySendSecretDm(m.user); flushNotices(m.user); });
 
   saveDb();
+});
+
+// /secret handler — ephemeral reply means only the invoking user ever sees
+// the response. Anyone who isn't the owner gets a polite nothing.
+client.on(Events.InteractionCreate, async (interaction) => {
+  if (!interaction.isChatInputCommand() || interaction.commandName !== 'secret') return;
+  const isOwner = interaction.user.username?.toLowerCase() === NOTICE_DM_USERNAME;
+  try {
+    if (isOwner) await interaction.reply({ content: SECRET_DM_TEXT, ephemeral: true });
+    else await interaction.reply({ content: '❌ This secret is not yours to keep.', ephemeral: true });
+  } catch (_) { /* interaction may have expired */ }
+});
+
+// Register /secret in guilds the bot joins after boot.
+client.on(Events.GuildCreate, (g) => {
+  g.commands.set([{ name: 'secret', description: '🤫 Owner-only. Reveals a private secret.' }]).catch(() => {});
 });
 
 client.on(Events.ShardDisconnect, () => {
