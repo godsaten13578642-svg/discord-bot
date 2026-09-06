@@ -114,8 +114,11 @@ async function main() {
 
   if (scenario === 'fresh') {
     assert(db.isUsingPostgres(), 'Postgres mode active');
-    assert(db.getAllAccounts().length === 1, 'migrated 1 account from accounts.json');
-    assert(db.getAllAccounts()[0].role === 'master', 'migrated account became master');
+    // Built-in Official Owner is auto-created on boot, so the migrated file
+    // user is demoted to 'owner' and the env-less owner is master.
+    assert(db.getAllAccounts().length === 2, 'migrated user + auto-created Official Owner');
+    assert(db.getMasterAccount()?.email === 'owner@civbot.admin', 'built-in Official Owner is master');
+    assert(db.getAccountByEmail('file@user.dev')?.role === 'owner', 'migrated account demoted to owner');
     const r = db.createAccount('new@user.dev', 'pw123456', 'NewUser');
     assert(r.success, 'createAccount works');
     const login = db.verifyLogin('new@user.dev', 'pw123456');
@@ -130,20 +133,21 @@ async function main() {
     assert(del.success && !db.getAccountById(second.userId), 'deleteAccount works for non-master');
     await new Promise(set => setImmediate(set));
     const persisted = fakeDb.get(1);
-    assert(persisted && persisted.accounts[r.userId]?.discordId === 'discord_42' && Object.keys(persisted.accounts).length === 2,
+    assert(persisted && persisted.accounts[r.userId]?.discordId === 'discord_42' && Object.keys(persisted.accounts).length === 3,
       'mutations persisted to Postgres');
   }
 
   if (scenario === 'existing') {
     assert(db.isUsingPostgres(), 'Postgres mode active');
-    assert(db.getAllAccounts().length === 1 && db.getAllAccounts()[0].email === 'db@user.dev',
+    assert(db.getAccountByEmail('db@user.dev') && db.getServerOwner('999')?.id === 'db_user_1',
       'DB payload loaded, local file ignored');
-    assert(db.getServerOwner('999')?.id === 'db_user_1', 'serverOwners map restored');
+    assert(db.getMasterAccount()?.email === 'owner@civbot.admin', 'built-in Official Owner is master');
   }
 
   if (scenario === 'down') {
     assert(!db.isUsingPostgres(), 'fell back to file mode when DB unreachable');
-    assert(db.getAllAccounts().length === 1, 'file store loaded as fallback');
+    assert(db.getAccountByEmail('file@user.dev'), 'file store loaded as fallback');
+    assert(db.getMasterAccount()?.email === 'owner@civbot.admin', 'built-in Official Owner is master');
     assert(db.createAccount('x@y.dev', 'pw', 'X').success, 'file mode still fully functional');
   }
 

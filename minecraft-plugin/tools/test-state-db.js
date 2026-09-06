@@ -62,7 +62,7 @@ const store = createGameStateStore({
 });
 
 async function main() {
-  await store.whenReady();
+  if (scenario !== 'norace') await store.whenReady(); // norace manages readiness itself
 
   if (scenario === 'fresh') {
     assert(store.isUsingPostgres(), 'Postgres mode active');
@@ -87,6 +87,32 @@ async function main() {
     await new Promise(r => setTimeout(r, 1700));
     const written = JSON.parse(fs.readFileSync('./db.json', 'utf8'));
     assert(written.servers['999']?.serverName === 'LiveNow', 'file mode still persists snapshots');
+  }
+
+  if (scenario === 'norace') {
+    // Regression: scheduleSave() fired BEFORE the (slow) DB load completes
+    // must not lose the stored settings. Mirrors the real server: snapshot()
+    // reads live objects that apply() mutates when the load lands.
+    let applied = false;
+    const live = { servers: { '000': { serverId: '000', serverName: 'RepoDefaults' } }, counters: { civ: 1 } };
+    fakeDb.set(1, { servers: { '777': { serverId: '777', serverName: 'SavedSettings' } }, counters: { civ: 55 }, savedAt: '2026-09-06T00:00:00.000Z' });
+    const slow = createGameStateStore({
+      file: './db.json',
+      snapshot: () => ({ ...live, savedAt: new Date().toISOString() }),
+      apply(saved) {
+        applied = true;
+        live.servers = saved.servers || live.servers;   // server.js does exactly this
+        Object.assign(live.counters, saved.counters || {});
+      },
+      debounceMs: 10,
+    });
+    slow.scheduleSave();          // simulates ClientReady firing early
+    await new Promise(r => setTimeout(r, 150)); // debounce + DB load long past
+    const after = fakeDb.get(1);
+    assert(after.servers['777']?.serverName === 'SavedSettings', 'stored settings survived the early save');
+    assert(after.servers['000'] === undefined, 'repo defaults were not written over the DB');
+    assert(after.counters?.civ === 55, 'stored counters survived');
+    assert(applied, 'stored settings were applied once the load completed');
   }
 
   console.log(`— scenario "${scenario}" done —`);

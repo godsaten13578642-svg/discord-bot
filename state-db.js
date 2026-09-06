@@ -42,7 +42,38 @@ function createGameStateStore({ file = './db.json', snapshot, apply, debounceMs 
   let saveTimer = null;
   let readyPromise = null;
 
-  // ── File mode ────────────────────────────────────────────────────
+  // Resolves once the persisted state has been loaded and merged into the
+  // live objects (Postgres mode), or immediately (file mode).
+  function whenReady() {
+    if (!readyPromise) {
+      if (usingPostgres) {
+        readyPromise = pgInit()
+          .catch(e => {
+            console.error('⚠️  Postgres unavailable for game state — falling back to db.json:', e.message);
+            usingPostgres = false;
+            try { pgPool = null; } catch (_) { /* noop */ }
+          })
+          .then(() => {});
+      } else {
+        readyPromise = Promise.resolve();
+      }
+    }
+    return readyPromise;
+  }
+
+  // Boot-time saves (Discord ClientReady, the 30s interval) would otherwise
+  // write in-memory state — built from the repo's committed db.json — over
+  // the real persisted settings before the load/apply finished. Neon free
+  // tier autosuspends, so its cold start can lose that race every deploy.
+  // Gating ALL writes until the load completes removes the clobber entirely.
+  function persist() {
+    return whenReady().then(() => {
+      if (usingPostgres) {
+        return pgSave().catch(e => console.error('❌ Game-state save to Postgres failed:', e.message));
+      }
+      saveToFile();
+    });
+  }
   function readLocalFile() {
     try {
       if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -65,14 +96,6 @@ function createGameStateStore({ file = './db.json', snapshot, apply, debounceMs 
        ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()`,
       [JSON.stringify(snapshot())]
     );
-  }
-
-  function persist() {
-    if (usingPostgres) {
-      return pgSave().catch(e => console.error('❌ Game-state save to Postgres failed:', e.message));
-    }
-    saveToFile();
-    return Promise.resolve();
   }
 
   // ── Init: load persisted state, migrating from db.json if needed ──
@@ -105,22 +128,8 @@ function createGameStateStore({ file = './db.json', snapshot, apply, debounceMs 
     }
   }
 
-  function whenReady() {
-    if (!readyPromise) {
-      if (usingPostgres) {
-        readyPromise = pgInit().catch(e => {
-          console.error('⚠️  Postgres unavailable for game state — falling back to db.json:', e.message);
-          usingPostgres = false;
-          try { pgPool = null; } catch (_) { /* noop */ }
-        });
-      } else {
-        readyPromise = Promise.resolve();
-      }
-    }
-    return readyPromise;
-  }
-
   // Debounced save — drop-in replacement for the old saveDb() body.
+  // (whenReady is defined above; persist waits on it to avoid boot clobbers.)
   function scheduleSave() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => { persist(); }, debounceMs);
