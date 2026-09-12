@@ -1,0 +1,37 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:custom_model_data",
+    "index": 0,
+    "cases": [
+      {
+        "when": "custom_swords:anakin_blue",
+        "model": { "type": "minecraft:model", "model": "custom_swords:item/anakin_blue" }
+      },
+      {
+        "when": "custom_swords:anakin_green",
+        "model": { "type": "minecraft:model", "model": "custom_swords:item/anakin_green" }
+      },
+      {
+        "when": "custom_swords:anakin_purple",
+        "model": { "type": "minecraft:model", "model": "custom_swords:item/anakin_purple" }
+      },
+      {
+        "when": "custom_swords:anakin_dark",
+        "model": { "type": "minecraft:model", "model": "custom_swords:item/anakin_dark" }
+      },
+      {
+        "when": "custom_swords:anakin_red",
+        "model": { "type": "minecraft:model", "model": "custom_swords:item/anakin_red" }
+      },
+      {
+        "when": "custom_swords:anakin_white",
+        "model": { "type": "minecraft:model", "model": "custom_swords:item/anakin_white" }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "minecraft:item/netherite_sword"
+    }
+  }
+}

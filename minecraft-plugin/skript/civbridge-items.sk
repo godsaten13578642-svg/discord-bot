@@ -1,0 +1,250 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  CivBridge Custom Items — Skript edition
+#  Drop this in plugins/Skript/scripts/ then run: /sk reload civbridge-items
+#
+#  Gives the same items as the CivBridge plugin's /saber, /infinity and
+#  /fandom commands — same base materials, names, lore and custom model data —
+#  so they render with the CivBridge resource pack AND the plugin still
+#  recognizes them (the plugin identifies items by the id on the first lore
+#  line, so powers, damage and gauntlet socketing all work).
+#
+#  Requirements:
+#    • Skript 2.12+ — the "custom model data strings" lines need 2.12+.
+#      On older Skript, delete those lines: the integer CMD then only
+#      textures clients 1.21.3 and below.
+#    • The CivBridge resource pack(s) applied on the server.
+#    • Minecraft 1.21.4+ clients for the string-id textures.
+#
+#  Commands (permission: civbridge.items, op by default):
+#    /civitem <id> [player]   give one item        e.g. /civitem the_colt
+#    /civitems [player]       give one of everything (24 items)
+#    /civitemlist             list all item ids
+# ═══════════════════════════════════════════════════════════════════════════
+
+function civItem(id :: text) :: item:
+    set {_id} to lowercase({_id})
+
+    # ── Lightsabers (netherite sword) ──────────────────────────────────────
+    if {_id} is "anakin_blue" or "blue" or "1001":
+        set {_i} to 1 netherite sword
+        set name of {_i} to "§b§lAnakin's Blue Saber"
+        set lore of {_i} to "§7custom_swords:anakin_blue", "", "§8§oA Jedi Guardian's blade.", "§8§oThe light side flows through it.", "", "§e✦ 10 Blade Damage", "§2Unbreakable", "§8CivBridge Lightsaber"
+        set custom model data of {_i} to 1001
+        set custom model data strings of {_i} to "custom_swords:anakin_blue"
+
+    if {_id} is "anakin_green" or "green" or "1002":
+        set {_i} to 1 netherite sword
+        set name of {_i} to "§a§lYavin Green Saber"
+        set lore of {_i} to "§7custom_swords:anakin_green", "", "§8§oCarried by Jedi Consulars.", "§8§oCalm minds cut deepest.", "", "§e✦ 9 Blade Damage", "§2Unbreakable", "§8CivBridge Lightsaber"
+        set custom model data of {_i} to 1002
+        set custom model data strings of {_i} to "custom_swords:anakin_green"
+
+    if {_id} is "anakin_purple" or "purple" or "1003":
+        set {_i} to 1 netherite sword
+        set name of {_i} to "§d§lMace's Purple Saber"
+        set lore of {_i} to "§7custom_swords:anakin_purple", "", "§8§oA rare crystal, a rarer wielder.", "§8§oWalks the line between light and dark.", "", "§e✦ 11 Blade Damage", "§2Unbreakable", "§8CivBridge Lightsaber"
+        set custom model data of {_i} to 1003
+        set custom model data strings of {_i} to "custom_swords:anakin_purple"
+
+    if {_id} is "anakin_dark" or "dark" or "1004":
+        set {_i} to 1 netherite sword
+        set name of {_i} to "§5§lDark Disciple Saber"
+        set lore of {_i} to "§7custom_swords:anakin_dark", "", "§8§oForged in the Umbaran dark.", "§8§oIts hum sounds like a warning.", "", "§e✦ 12 Blade Damage", "§2Unbreakable", "§8CivBridge Lightsaber"
+        set custom model data of {_i} to 1004
+        set custom model data strings of {_i} to "custom_swords:anakin_dark"
+
+    if {_id} is "anakin_red" or "red" or "1005":
+        set {_i} to 1 netherite sword
+        set name of {_i} to "§c§lCrimson Inquisitor Saber"
+        set lore of {_i} to "§7custom_swords:anakin_red", "", "§8§oThe crystal bleeds.", "§8§oIt remembers every scream.", "", "§e✦ 12 Blade Damage", "§2Unbreakable", "§8CivBridge Lightsaber"
+        set custom model data of {_i} to 1005
+        set custom model data strings of {_i} to "custom_swords:anakin_red"
+
+    if {_id} is "anakin_white" or "white" or "1006":
+        set {_i} to 1 netherite sword
+        set name of {_i} to "§f§lAhsoka's White Sabers"
+        set lore of {_i} to "§7custom_swords:anakin_white", "", "§8§oPurified from the dark.", "§8§oBalance, held in one hand.", "", "§e✦ 9 Blade Damage", "§2Unbreakable", "§8CivBridge Lightsaber"
+        set custom model data of {_i} to 1006
+        set custom model data strings of {_i} to "custom_swords:anakin_white"
+
+    # ── Infinity Stones (netherite axe) ────────────────────────────────────
+    if {_id} is "space" or "space_stone" or "2001":
+        set {_i} to 1 netherite axe
+        set name of {_i} to "§b§lSpace Stone"
+        set lore of {_i} to "§8civbridge:infinity_stone_space", "", "§7An Infinity Stone. It hums with restrained", "§7power, cold to the touch.", "", "§bTeleport§7: right-click the gauntlet to warp up to 32 blocks —", "§7look at a block to go there, or look at the sky to blast forward.", "", "§6Sneak + right-click the §fInfinity Gauntlet", "§6to socket it and claim its power."
+        set custom model data of {_i} to 2001
+        set custom model data strings of {_i} to "civbridge:infinity_stone_space"
+
+    if {_id} is "mind" or "mind_stone" or "2002":
+        set {_i} to 1 netherite axe
+        set name of {_i} to "§e§lMind Stone"
+        set lore of {_i} to "§8civbridge:infinity_stone_mind", "", "§7An Infinity Stone. It hums with restrained", "§7power, cold to the touch.", "", "§eMind control§7: right-click a mob (or player, if allowed) within", "§7eight blocks and it fights beside you for 60 seconds.", "", "§6Sneak + right-click the §fInfinity Gauntlet", "§6to socket it and claim its power."
+        set custom model data of {_i} to 2002
+        set custom model data strings of {_i} to "civbridge:infinity_stone_mind"
+
+    if {_id} is "reality" or "reality_stone" or "2003":
+        set {_i} to 1 netherite axe
+        set name of {_i} to "§c§lReality Stone"
+        set lore of {_i} to "§8civbridge:infinity_stone_reality", "", "§7An Infinity Stone. It hums with restrained", "§7power, cold to the touch.", "", "§cReality wave§7: right-click to warp the ground around you —", "§7nearby foes levitate helplessly for 6 seconds.", "", "§6Sneak + right-click the §fInfinity Gauntlet", "§6to socket it and claim its power."
+        set custom model data of {_i} to 2003
+        set custom model data strings of {_i} to "civbridge:infinity_stone_reality"
+
+    if {_id} is "power" or "power_stone" or "2004":
+        set {_i} to 1 netherite axe
+        set name of {_i} to "§d§lPower Stone"
+        set lore of {_i} to "§8civbridge:infinity_stone_power", "", "§7An Infinity Stone. It hums with restrained", "§7power, cold to the touch.", "", "§dPower blast§7: right-click to release a shockwave that hurls", "§7everything nearby away from you.", "", "§6Sneak + right-click the §fInfinity Gauntlet", "§6to socket it and claim its power."
+        set custom model data of {_i} to 2004
+        set custom model data strings of {_i} to "civbridge:infinity_stone_power"
+
+    if {_id} is "time" or "time_stone" or "2005":
+        set {_i} to 1 netherite axe
+        set name of {_i} to "§a§lTime Stone"
+        set lore of {_i} to "§8civbridge:infinity_stone_time", "", "§7An Infinity Stone. It hums with restrained", "§7power, cold to the touch.", "", "§aTime rewind§7: right-click to roll yourself back 5 seconds in", "§7time — health, hunger, and position, exactly where you stood.", "", "§6Sneak + right-click the §fInfinity Gauntlet", "§6to socket it and claim its power."
+        set custom model data of {_i} to 2005
+        set custom model data strings of {_i} to "civbridge:infinity_stone_time"
+
+    if {_id} is "soul" or "soul_stone" or "2006":
+        set {_i} to 1 netherite axe
+        set name of {_i} to "§6§lSoul Stone"
+        set lore of {_i} to "§8civbridge:infinity_stone_soul", "", "§7An Infinity Stone. It hums with restrained", "§7power, cold to the touch.", "", "§6Soul harvest§7: right-click to pull the souls of nearby slain", "§7creatures back as healing — 1 ❤ per soul, up to 8 souls.", "", "§6Sneak + right-click the §fInfinity Gauntlet", "§6to socket it and claim its power."
+        set custom model data of {_i} to 2006
+        set custom model data strings of {_i} to "civbridge:infinity_stone_soul"
+
+    # ── The Infinity Gauntlet (carrot on a stick) ──────────────────────────
+    if {_id} is "gauntlet" or "infinity_gauntlet" or "2101":
+        set {_i} to 1 carrot on a stick
+        set name of {_i} to "§6§lInfinity Gauntlet"
+        set lore of {_i} to "§8civbridge:gauntlet", "", "§7Six empty sockets. It feels heavier", "§7than it should, as if waiting.", "", "§6Sneak + right-click while holding a", "§6stone §fto socket it."
+        set custom model data of {_i} to 2101
+        set custom model data strings of {_i} to "civbridge:gauntlet_empty"
+
+    # ── Fandom items (Parkour Civ / Naruto / Supernatural) ─────────────────
+    if {_id} is "parkour_boots" or "parkour" or "3001":
+        set {_i} to 1 netherite pickaxe
+        set name of {_i} to "§6§lParkour Master's Boots"
+        set lore of {_i} to "§8civbridge:fandom_parkour_boots", "", "§eCarry them to sprint-jump across any gap.", "§7§oFalling no longer hurts you.", "§7§oBlocks the void? §7No. Blocks gravity's consequences? §7Yes.", "", "§2Unbreakable", "§8CivBridge Fandom Item"
+        set custom model data of {_i} to 3001
+        set custom model data strings of {_i} to "civbridge:fandom_parkour_boots"
+
+    if {_id} is "no_scope_eyes" or "noscope" or "3002":
+        set {_i} to 1 netherite pickaxe
+        set name of {_i} to "§b§lNo-Scope Eyes"
+        set lore of {_i} to "§8civbridge:fandom_no_scope_eyes", "", "§bSee everything, everywhere.", "§7§oRight-click for 15s of true sight:", "§7§oglowing on all entities within 48 blocks.", "", "§2Unbreakable", "§8CivBridge Fandom Item"
+        set custom model data of {_i} to 3002
+        set custom model data strings of {_i} to "civbridge:fandom_no_scope_eyes"
+
+    if {_id} is "hidden_leaf_headband" or "headband" or "3003":
+        set {_i} to 1 netherite pickaxe
+        set name of {_i} to "§9§lHidden Leaf Headband"
+        set lore of {_i} to "§8civbridge:fandom_hidden_leaf_headband", "", "§9The Will of Fire, carried in hand.", "§7§oSpeed II and Jump II while held.", "§7§oRight-click to hone your chakra (regen burst).", "", "§2Unbreakable", "§8CivBridge Fandom Item"
+        set custom model data of {_i} to 3003
+        set custom model data strings of {_i} to "civbridge:fandom_hidden_leaf_headband"
+
+    if {_id} is "summoning_scroll" or "scroll" or "3004":
+        set {_i} to 1 netherite pickaxe
+        set name of {_i} to "§d§lSummoning Scroll"
+        set lore of {_i} to "§8civbridge:fandom_summoning_scroll", "", "§dRight-click to summon a wolf companion", "§dfor 3 minutes. It fights beside you.", "§7§oBlood contract signed: unlimited uses.", "", "§2Unbreakable", "§8CivBridge Fandom Item"
+        set custom model data of {_i} to 3004
+        set custom model data strings of {_i} to "civbridge:fandom_summoning_scroll"
+
+    if {_id} is "ninja_star" or "star" or "3101":
+        set {_i} to 1 netherite shovel
+        set name of {_i} to "§7§lNinja Star"
+        set lore of {_i} to "§8civbridge:fandom_ninja_star", "", "§7Right-click to throw.", "§7§oLeft-click melee: 6 damage.", "§7§oInfinite stars — a true shinobi never runs out.", "", "§e✦ 6 Damage", "§2Unbreakable", "§8CivBridge Fandom Item"
+        set custom model data of {_i} to 3101
+        set custom model data strings of {_i} to "civbridge:fandom_ninja_star"
+
+    if {_id} is "rasengan" or "3102":
+        set {_i} to 1 netherite shovel
+        set name of {_i} to "§b§lRasengan"
+        set lore of {_i} to "§8civbridge:fandom_rasengan", "", "§bRight-click: launch a spiraling sphere", "§bthat detonates for heavy damage.", "§7§o15 second cooldown.", "", "§2Unbreakable", "§8CivBridge Fandom Item"
+        set custom model data of {_i} to 3102
+        set custom model data strings of {_i} to "civbridge:fandom_rasengan"
+
+    if {_id} is "chidori_blade" or "chidori" or "3103":
+        set {_i} to 1 netherite shovel
+        set name of {_i} to "§b§lChidori Blade"
+        set lore of {_i} to "§8civbridge:fandom_chidori_blade", "", "§bLeft-click: 11 lightning damage.", "§7§oRight-click: dash through enemies in a", "§7§ocrackle of a thousand birds. 8s cooldown.", "", "§e✦ 11 Damage", "§2Unbreakable", "§8CivBridge Fandom Item"
+        set custom model data of {_i} to 3103
+        set custom model data strings of {_i} to "civbridge:fandom_chidori_blade"
+
+    if {_id} is "angel_blade" or "3104":
+        set {_i} to 1 netherite shovel
+        set name of {_i} to "§f§lAngel Blade"
+        set lore of {_i} to "§8civbridge:fandom_angel_blade", "", "§fThe blade of Heaven.", "§7§oLeft-click: 12 damage. Deals double", "§7§oto undead — smiting what crawls from the pit.", "", "§e✦ 12 Damage", "§2Unbreakable", "§8CivBridge Fandom Item"
+        set custom model data of {_i} to 3104
+        set custom model data strings of {_i} to "civbridge:fandom_angel_blade"
+
+    if {_id} is "first_blade" or "3201":
+        set {_i} to 1 netherite hoe
+        set name of {_i} to "§4§lThe First Blade"
+        set lore of {_i} to "§8civbridge:fandom_first_blade", "", "§4The blade that killed Abel.", "§7§oLeft-click: 14 damage. The Mark hungers:", "§7§oeach kill heals you 2 ❤.", "", "§e✦ 14 Damage", "§2Unbreakable", "§8CivBridge Fandom Item"
+        set custom model data of {_i} to 3201
+        set custom model data strings of {_i} to "civbridge:fandom_first_blade"
+
+    if {_id} is "deaths_scythe" or "scythe" or "3202":
+        set {_i} to 1 netherite hoe
+        set name of {_i} to "§5§lDeath's Scythe"
+        set lore of {_i} to "§8civbridge:fandom_deaths_scythe", "", "§5Left-click: 13 damage.", "§7§oRight-click: reap — 6 damage to every", "§7§oliving thing in a 6-block ring. 12s cooldown.", "", "§e✦ 13 Damage", "§2Unbreakable", "§8CivBridge Fandom Item"
+        set custom model data of {_i} to 3202
+        set custom model data strings of {_i} to "civbridge:fandom_deaths_scythe"
+
+    if {_id} is "the_colt" or "colt" or "3203":
+        set {_i} to 1 netherite hoe
+        set name of {_i} to "§e§lThe Colt"
+        set lore of {_i} to "§8civbridge:fandom_the_colt", "", "§eRight-click: fire at what you're looking at.", "§4One shot kills most things.", "§7§o13 rounds before it must rest. Works on almost everything…", "", "§2Unbreakable", "§8CivBridge Fandom Item"
+        set custom model data of {_i} to 3203
+        set custom model data strings of {_i} to "civbridge:fandom_the_colt"
+
+    # ── Common: unbreakable, then return ───────────────────────────────────
+    if {_i} is set:
+        set {_i} to unbreakable {_i}
+    return {_i}
+
+
+command /civitem <text> [<offline player>]:
+    permission: civbridge.items
+    permission message: §cYou need civbridge.items to do that.
+    usage: /civitem <id> [player]
+    trigger:
+        set {_target} to arg-2 ? player
+        if {_target} is not set:
+            send "§cUsage: /civitem <id> <player> (console must name a player)"
+            stop
+        if {_target} is not online:
+            send "§c%{_target}% is not online."
+            stop
+        set {_item} to civItem(arg-1)
+        if {_item} is not set:
+            send "§cUnknown item §f%arg-1%§c — use /civitemlist for ids."
+            stop
+        give {_target} {_item}
+        send "§aGave §f%arg-1%§a to §f%{_target}%§a."
+
+
+command /civitems [<offline player>]:
+    permission: civbridge.items
+    permission message: §cYou need civbridge.items to do that.
+    usage: /civitems [player]
+    trigger:
+        set {_target} to arg-1 ? player
+        if {_target} is not set:
+            send "§cUsage: /civitems <player> (console must name a player)"
+            stop
+        if {_target} is not online:
+            send "§c%{_target}% is not online."
+            stop
+        loop "anakin_blue", "anakin_green", "anakin_purple", "anakin_dark", "anakin_red", "anakin_white", "space", "mind", "reality", "power", "time", "soul", "gauntlet", "parkour_boots", "no_scope_eyes", "hidden_leaf_headband", "summoning_scroll", "ninja_star", "rasengan", "chidori_blade", "angel_blade", "first_blade", "deaths_scythe" and "the_colt":
+            set {_item} to civItem(loop-value)
+            if {_item} is set:
+                give {_target} {_item}
+        send "§aGave the full CivBridge set (24 items) to §f%{_target}%§a."
+
+
+command /civitemlist:
+    permission: civbridge.items
+    permission message: §cYou need civbridge.items to do that.
+    trigger:
+        send "§6&lLightsabers: §fanakin_blue, anakin_green, anakin_purple, anakin_dark, anakin_red, anakin_white §7(or blue/green/purple/dark/red/white, or 1001-1006)"
+        send "§6&lInfinity: §fspace, mind, reality, power, time, soul §7(2001-2006) §6&land §fgauntlet §7(2101)"
+        send "§6&lFandom: §fparkour_boots, no_scope_eyes, hidden_leaf_headband, summoning_scroll, ninja_star, rasengan, chidori_blade, angel_blade, first_blade, deaths_scythe, the_colt §7(3001-3203)"
