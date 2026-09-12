@@ -15,6 +15,7 @@ import com.civbot.infinity.GauntletListener;
 import com.civbot.fandom.FandomListener;
 import com.civbot.lightsaber.ResourcePackListener;
 import com.civbot.lightsaber.SaberListener;
+import com.civbot.pack.EmbeddedPackServer;
 import com.civbot.listeners.ChatListener;
 import com.civbot.listeners.PlayerListener;
 import com.civbot.skript.SkriptScriptManager;
@@ -33,6 +34,7 @@ public class CivBridgePlugin extends JavaPlugin {
     private BotWebSocketClient wsClient;
     private SkriptScriptManager skriptScripts;
     private ResourcePackListener resourcePackListener;
+    private EmbeddedPackServer packServer;
     private BossManager bossManager;
 
     // minecraftUUID -> discordId
@@ -102,8 +104,10 @@ public class CivBridgePlugin extends JavaPlugin {
         getCommand("boss").setExecutor(boss);
         getCommand("boss").setTabCompleter(boss);
 
-        // Resource pack (lightsaber models/textures). URL may point at the bot
-        // API (server.js serves /packs/lightsabers.zip) or any static host.
+        // Resource pack (lightsaber models/textures). By default the plugin
+        // hosts the pack ITSELF over a tiny embedded HTTP server on the same
+        // address as the Minecraft server — no external host or SHA-1 needed.
+        // Set resource-pack.url in config.yml to override with an external URL.
         resourcePackListener = createResourcePackListener();
         if (resourcePackListener != null) {
             getServer().getPluginManager().registerEvents(resourcePackListener, this);
@@ -124,6 +128,7 @@ public class CivBridgePlugin extends JavaPlugin {
             apiClient.postMcEvent("server_stop", null, "Server is now **offline** 🔴", null);
         }
         if (bossManager != null) bossManager.shutdown();
+        if (packServer != null) packServer.stop();
         if (wsClient != null) wsClient.closeBlocking();
         getLogger().info("CivBridge disabled.");
     }
@@ -134,29 +139,48 @@ public class CivBridgePlugin extends JavaPlugin {
     public SkriptScriptManager getSkriptScripts() { return skriptScripts; }
     public BossManager getBossManager()          { return bossManager; }
     public ResourcePackListener getResourcePackListener() { return resourcePackListener; }
+    public EmbeddedPackServer getPackServer()            { return packServer; }
 
-    /** Builds the pack applier from config; null when no pack URL is set. */
+    /** Builds the pack applier: embedded server by default, or an external URL from config. Null when neither works. */
     private ResourcePackListener createResourcePackListener() {
         String url = getConfig().getString("resource-pack.url", "").trim();
+        byte[] sha1 = new byte[0];
+        String source;
+
         if (url.isEmpty()) {
-            getLogger().info("Lightsaber resource pack not configured (resource-pack.url) — players will see vanilla swords.");
-            return null;
-        }
-        String sha1Hex = getConfig().getString("resource-pack.sha1", "").trim();
-        byte[] sha1;
-        if (sha1Hex.isEmpty()) {
-            // No hash configured: if the URL is a file path, hash it; else skip.
-            java.io.File local = new java.io.File(url);
-            sha1 = local.isFile() ? ResourcePackListener.sha1Of(local) : new byte[0];
-            if (sha1.length == 0) {
-                getLogger().warning("resource-pack.url is set but resource-pack.sha1 is empty — clients may re-download the pack every join.");
+            // Zero-config path: serve the pack embedded in this jar.
+            if (!getConfig().getBoolean("resource-pack.embedded", true)) {
+                getLogger().info("Resource pack disabled (resource-pack.embedded=false, no resource-pack.url) — players will see vanilla items.");
+                return null;
             }
+            packServer = new EmbeddedPackServer(this);
+            int port = getConfig().getInt("resource-pack.port", getConfig().getInt("server.port", 0));
+            String bind = getConfig().getString("resource-pack.bind", "").trim();
+            String embeddedUrl = packServer.start(bind, port);
+            if (embeddedUrl == null) {
+                getLogger().warning("No resource pack will be offered — players will see vanilla items.");
+                return null;
+            }
+            url = embeddedUrl;
+            sha1 = packServer.sha1();
+            source = "embedded (" + packServer.getPort() + ", sha1 " + packServer.sha1Hex() + ")";
         } else {
-            sha1 = ResourcePackListener.hexToBytes(sha1Hex);
+            // External URL from config — honor a manually configured sha1.
+            String sha1Hex = getConfig().getString("resource-pack.sha1", "").trim();
+            if (sha1Hex.isEmpty()) {
+                java.io.File local = new java.io.File(url);
+                sha1 = local.isFile() ? ResourcePackListener.sha1Of(local) : new byte[0];
+                if (sha1.length == 0) {
+                    getLogger().warning("resource-pack.url is set but resource-pack.sha1 is empty — clients may re-download the pack every join.");
+                }
+            } else {
+                sha1 = ResourcePackListener.hexToBytes(sha1Hex);
+            }
+            source = "external URL";
         }
+
         ResourcePackListener listener = new ResourcePackListener(this, url, sha1);
-        getLogger().info("Lightsaber resource pack active: " + url
-            + (sha1.length > 0 ? " (sha1 " + ResourcePackListener.toHex(sha1) + ")" : ""));
+        getLogger().info("Resource pack active (" + source + "): " + url);
         // Send to anyone already online (e.g. after /civreload).
         getServer().getScheduler().runTask(this, listener::applyToOnline);
         return listener;

@@ -20,6 +20,7 @@ com\civbot\bosses\BossManager$4.class
 com\civbot\commands\DiscordCommand.class
 com\civbot\infinity\GauntletListener$3.class
 com\civbot\fandom\FandomListener$1.class
+com\civbot\pack\EmbeddedPackServer.class
 com\civbot\listeners\ChatListener.class
 com\civbot\skript\SkriptScriptManager$ScriptResult.class
 com\civbot\skript\SkriptScriptManager$ScriptIssue.class

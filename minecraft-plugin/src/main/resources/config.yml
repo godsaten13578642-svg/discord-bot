@@ -66,18 +66,31 @@ bosses:
   # announce spawns in chat
   broadcast-spawns: true
 
-# ── Resource Pack (lightsaber models) ───────────────────────────────────────
-# The pack with all custom item models ships inside CivBridge-1.1.0.jar
-# (civbridge-pack/ → extract or use the ready-made zip in minecraft-plugin/resource-pack/).
-# Host the zip anywhere HTTPS and set the URL here — players get prompted on join.
-# Easiest option: your bot service now serves the newest pack itself at /downloads/pack
-# (also downloadable from the dashboard's Minecraft tab). Example:
-#   url: "https://civbot-api.onrender.com/downloads/pack"
+# ── Resource Pack (all custom items: sabers, stones, gauntlet, fandom) ──────
+# ZERO CONFIG by default: CivBridge serves the pack itself over a tiny built-in
+# HTTP server on the same address as your Minecraft server. Players are
+# prompted to accept the pack when they join. The SHA-1 is computed
+# automatically, so clients cache it properly.
+#
+# Only touch this section if the built-in server can't work for you (e.g. the
+# Minecraft server sits behind NAT/proxy that doesn't forward the pack port):
+#   1. Set url to any HTTPS URL hosting civbridge-pack.zip
+#      (e.g. https://civbot-api.onrender.com/downloads/pack)
+#   2. Set sha1 to the pack's SHA-1 (shown on the dashboard's Downloads card)
 resource-pack:
+  # Empty = use the built-in embedded pack server (recommended).
   url: ""
-  # SHA-1 of the zip (lets clients cache it). If empty and url is a local file
-  # path, CivBridge hashes it for you. The dashboard's Downloads card shows the
-  # current SHA-1 to paste here.
+  # Port for the embedded pack server. 0 = pick a free port automatically.
+  # If players connect from the internet, forward/open this port alongside
+  # 25565 (or set it to 25565 with bind matching your server address — the
+  # pack then shares the Minecraft port's firewall rule on most hosts).
+  # NOTE: if you forward a fixed port, set it here so it stays the same.
+  port: 0
+  # Address to bind the embedded server to. Empty = all interfaces (0.0.0.0).
+  bind: ""
+  # Set false to fully disable pack offering when url is also empty.
+  embedded: true
+  # Only used with an external url above. Empty + local file path = auto-hashed.
   sha1: ""
 
 # Prefix shown in Discord for Minecraft messages

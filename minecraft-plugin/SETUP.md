@@ -223,36 +223,45 @@ vanilla attack attributes. They're unbreakable.
 
 ### The resource pack
 
-The saber **models and textures ship inside the plugin JAR** and are also
-copied to `minecraft-plugin/resource-pack/lightsabers.zip` for hosting:
+One pack covers **all** custom items: 6 lightsabers, 6 Infinity Stones + the
+Gauntlet, and the fandom items. The pack **ships inside the plugin JAR** and is
+also built to `minecraft-plugin/resource-pack/civbridge-pack.zip`:
 
-- `src/main/resources/lightsabers/` — the pack source (pack.mcmeta + assets)
-- `resource-pack/lightsabers.zip` — the ready-to-host ZIP (contents zipped, `pack.mcmeta` at root)
+- `src/main/resources/civbridge-pack/` — the pack source (pack.mcmeta + assets)
+- `resource-pack/civbridge-pack.zip` — the ready-to-host ZIP (`pack.mcmeta` at root)
 
 The pack works two ways (it includes both systems):
-- **1.21.4+**: string `custom_model_data` (`custom_swords:anakin_blue` …) via `assets/minecraft/items/netherite_sword.json`
-- **1.21.3 and older**: integer `CustomModelData` 1001–1006 via legacy override models
+- **1.21.4+**: string `custom_model_data` (`custom_swords:anakin_blue`,
+  `civbridge:fandom_the_colt` …) via `assets/minecraft/items/*.json`
+- **1.21.3 and older**: integer `CustomModelData` 1001–3203 via legacy override models
 
 ### Turning it on (server config)
 
-1. Host `lightsabers.zip` over HTTPS. Easiest options:
-   - Your Render bot service: drop the zip in the deployed files and serve it
-     from the same host as the API (e.g. `https://civbot-api.onrender.com/packs/lightsabers.zip`), or
-   - Any static host / GitHub Pages / S3.
-2. In `plugins/CivBridge/config.yml`:
+**Default — zero config.** The plugin serves the pack itself over a tiny
+built-in HTTP server bound to the Minecraft server's address. No external
+host, no SHA-1 to paste. If players join from the internet, just make sure the
+pack port is reachable (see `port` in config.yml — set it to a fixed number
+and forward it, or share the Minecraft port as described in config.yml).
+
+**External hosting (optional).** If the embedded server can't work for you
+(NAT/proxy that can't forward the port), host `civbridge-pack.zip` over HTTPS
+— e.g. your bot service already serves the newest build at
+`https://civbot-api.onrender.com/downloads/pack` — and set:
 
    ```yaml
    resource-pack:
-     url: "https://civbot-api.onrender.com/packs/lightsabers.zip"
-     sha1: "1bf88db9ea53ae56a026f3ca528448e6ce664e02"   # sha1 of YOUR hosted zip
+     url: "https://civbot-api.onrender.com/downloads/pack"
+     sha1: "1976b65988fa68c58551a831fb3b3a9650312b9f"   # shown on the dashboard's Downloads card
    ```
 
-3. `/civreload`. Players get the pack prompt on join (and immediately if
-   they're online during the reload). Players must accept the pack to see the
-   sabers; without it they just see plain netherite swords.
+Then `/civreload`. Players get the pack prompt on join (and immediately if
+they're online during the reload). Players must accept the pack to see the
+custom items; without it they just see plain netherite tools.
 
-> Rebuild the zip yourself after editing textures/models in
-> `src/main/resources/lightsabers/`, then update the `sha1` line.
+> Edit textures/models in `src/main/resources/civbridge-pack/`, then rebuild:
+> `node tools/check_pack.mjs && node tools/build_resource_pack.mjs civbridge-pack`
+> (the validator catches missing selectors/textures; Maven bundles the fresh
+> zip into the jar automatically).
 
 ---
 
