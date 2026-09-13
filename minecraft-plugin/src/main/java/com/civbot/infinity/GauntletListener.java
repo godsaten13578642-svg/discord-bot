@@ -102,7 +102,8 @@ public class GauntletListener implements Listener {
 
         // Held-item ambience: a glowing hand while the gauntlet is worn in the
         // off-hand. Shimmer when empty, the dominant socketed stone's color
-        // once powered, a slow rainbow plus rising sparks with all six. Every
+        // once powered, a slow rainbow plus rising sparks with all six — and
+        // a quiet ambient hum only once the gauntlet is complete. Every
         // 6 ticks (~0.3s) — visible but cheap.
         new BukkitRunnable() {
             int tick = 0;
@@ -123,12 +124,20 @@ public class GauntletListener implements Listener {
                     List<InfinityStone> socketed = InfinityFactory.readSockets(off, socketsKey);
                     World w = p.getWorld();
                     if (socketed.size() >= InfinityStone.values().length) {
-                        // Complete gauntlet: slow rainbow shimmer + rising sparks.
+                        // Complete gauntlet: slow rainbow shimmer, rising sparks,
+                        // and a quiet ambient hum pulsing every ~1.8s. Beacon
+                        // ambience at low volume in the AMBIENT category, with a
+                        // slowly breathing pitch so it never sounds mechanical.
                         Particle dust = Particle.DUST;
                         org.bukkit.Particle.DustOptions rainbow = new org.bukkit.Particle.DustOptions(
                             org.bukkit.Color.fromRGB(java.awt.Color.HSBtoRGB((tick % 60) / 60f, 0.8f, 1f)), 1.0f);
                         w.spawnParticle(dust, hand, 2, 0.12, 0.18, 0.12, rainbow);
                         if (tick % 12 == 0) w.spawnParticle(Particle.END_ROD, hand, 1, 0.1, 0.1, 0.1, 0.012);
+                        if (tick % 36 == 0) {
+                            float pitch = 0.62f + 0.06f * (float) Math.sin(Math.toRadians(tick * 3));
+                            w.playSound(hand, Sound.BLOCK_BEACON_AMBIENT,
+                                org.bukkit.SoundCategory.AMBIENT, 0.18f, pitch);
+                        }
                     } else if (!socketed.isEmpty()) {
                         // Powered: shimmer in the last-socketed stone's color.
                         org.bukkit.Color c = chatColorToRgb(socketed.get(socketed.size() - 1).color());
