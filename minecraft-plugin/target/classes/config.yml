@@ -81,10 +81,9 @@ resource-pack:
   # Empty = use the built-in embedded pack server (recommended).
   url: ""
   # Port for the embedded pack server. 0 = pick a free port automatically.
-  # If players connect from the internet, forward/open this port alongside
-  # 25565 (or set it to 25565 with bind matching your server address — the
-  # pack then shares the Minecraft port's firewall rule on most hosts).
-  # NOTE: if you forward a fixed port, set it here so it stays the same.
+  # If players join from the internet, forward/open this port too (e.g. 25566 —
+  # it can NOT be 25565, since the Minecraft server already binds that port).
+  # Set a fixed number here so the URL stays stable across restarts.
   port: 0
   # Address to bind the embedded server to. Empty = all interfaces (0.0.0.0).
   bind: ""
