@@ -124,3 +124,22 @@ fs.writeFileSync(OUT, zip);
 const sha1 = crypto.createHash('sha1').update(zip).digest('hex');
 console.log(`${path.relative(ROOT, OUT)}  (${(zip.length / 1024).toFixed(1)} KiB, ${files.length} files)`);
 console.log(`SHA-1: ${sha1}`);
+
+// ── Validate before blessing the build ──────────────────────────────────────
+// Structural check (selectors -> models -> textures on the SOURCE tree) plus
+// the full client-style chain simulation on the built ZIP itself, including
+// the required-CMD-id contract. A broken pack fails the build.
+const { spawnSync } = await import('node:child_process');
+const checks = [
+  ['check_pack.mjs', []],
+  ['check_pack_chains.mjs', [OUT]],
+];
+let failed = false;
+for (const [script, scriptArgs] of checks) {
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'tools', script), ...scriptArgs], { stdio: 'inherit' });
+  if (r.status !== 0) failed = true;
+}
+if (failed) {
+  console.error(`✗ ${name} FAILED validation — fix the problems above; the zip on disk is NOT trustworthy.`);
+  process.exit(1);
+}

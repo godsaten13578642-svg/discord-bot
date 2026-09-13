@@ -6,7 +6,8 @@
   "scripts": {
     "start": "concurrently \"node server.js\" \"cd frontend && npm start\"",
     "setup": "npm install && cd frontend && npm install",
-    "dev": "concurrently \"node server.js\" \"cd frontend && npm start\""
+    "dev": "concurrently \"node server.js\" \"cd frontend && npm start\"",
+    "test": "node minecraft-plugin/tools/check_pack.mjs && node minecraft-plugin/tools/check_pack_chains.mjs && node minecraft-plugin/tools/test-accounts-db.js fresh && node minecraft-plugin/tools/test-accounts-db.js existing && node minecraft-plugin/tools/test-accounts-db.js down && node minecraft-plugin/tools/test-accounts-db.js owner && node minecraft-plugin/tools/test-state-db.js fresh && node minecraft-plugin/tools/test-state-db.js existing && node minecraft-plugin/tools/test-state-db.js down && node minecraft-plugin/tools/test-state-db.js norace"
   },
   "dependencies": {
     "ajv": "^8.20.0",

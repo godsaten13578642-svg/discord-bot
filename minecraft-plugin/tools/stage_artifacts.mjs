@@ -66,6 +66,21 @@ if (jar) {
 // ── Resource pack ───────────────────────────────────────────────────────────
 // civbridge-pack.zip covers sabers + infinity + fandom. lightsabers.zip is the
 // legacy saber-only pack — prefer civbridge-pack, keep whichever exists.
+// Validate BEFORE staging: a pack that fails client-style chain validation
+// must not reach the website's download endpoint.
+const { spawnSync } = await import('node:child_process');
+const zipsToCheck = ['civbridge-pack.zip', 'lightsabers.zip']
+  .map(n => path.join(PLUGIN_DIR, 'resource-pack', n))
+  .filter(p => fs.existsSync(p));
+if (zipsToCheck.length) {
+  const r = spawnSync(process.execPath,
+    [path.join(PLUGIN_DIR, 'tools', 'check_pack_chains.mjs'), ...zipsToCheck],
+    { stdio: 'inherit' });
+  if (r.status !== 0) {
+    console.error('✗ resource pack failed chain validation — NOT staging it (website keeps serving the last good pack).');
+    process.exit(1);
+  }
+}
 let pack = null;
 for (const name of ['civbridge-pack.zip', 'lightsabers.zip']) {
   const src = path.join(PLUGIN_DIR, 'resource-pack', name);
