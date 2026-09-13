@@ -41,11 +41,11 @@ for (let i = 2; i < process.argv.length; i++) {
   if (m) FLAGS[m[1]] = m[2] !== undefined ? m[2] : true;
 }
 const num = (k, d) => { const v = parseFloat(FLAGS[k]); return Number.isFinite(v) ? v : d; };
-const GLOW_ALPHA = Math.max(0, Math.min(255, num('glow-alpha', 96)));
+const GLOW_ALPHA = Math.max(0, Math.min(255, num('glow-alpha', 64)));
 const GLOW_BOOST = num('glow-boost', 1);
 const FACET_BOOST = num('facet-boost', 1);
 const GEM_SCALE = num('gem-scale', 1);
-const SOCKET_SCALE = num('socket-scale', 1);
+const SOCKET_SCALE = num('socket-scale', 1.2);
 
 /** Scales element boxes about a center point (defaults to item center). */
 function scaleElements(elements, s, center = [8, 8, 8]) {
@@ -181,34 +181,49 @@ for (const id of STONES) {
       clamp255((b * 0.55 + 128) * GLOW_BOOST)], GLOW_ALPHA));
 
   const t = `minecraft:block/civstone_${id}`;
+  // Layered brilliant cut: point -> pavilion steps -> bright girdle ->
+  // crown steps -> table. More, thinner layers read as "gem" at item scale.
   const gem = {
     parent: 'minecraft:item/generated',
     textures: { body: `${t}_body`, facet: `${t}_facet`, glow: `${t}_glow`, particle: `${t}_body` },
     elements: [
-      // Lower gem half (wider).
-      { name: 'gem_lower', from: [5, 5, 6], to: [11, 8, 10],
-        faces: { north: FACE([0, 0, 6, 3], '#body'), south: FACE([0, 0, 6, 3], '#body'),
-                 east: FACE([0, 0, 4, 3], '#body'), west: FACE([0, 0, 4, 3], '#body'),
-                 up: FACE([0, 0, 6, 4], '#body'), down: FACE([0, 0, 6, 4], '#body') } },
-      // Upper gem half (tapered).
-      { name: 'gem_upper', from: [5.75, 8, 6.5], to: [10.25, 11, 9.5],
-        faces: { north: FACE([0, 0, 4.5, 3], '#body'), south: FACE([0, 0, 4.5, 3], '#body'),
-                 east: FACE([0, 0, 3, 3], '#body'), west: FACE([0, 0, 3, 3], '#body'),
-                 up: FACE([0, 0, 4.5, 3], '#facet'), down: FACE([0, 0, 4.5, 3], '#body') } },
+      // Pavilion: three tapering steps down to a point (culet).
+      { name: 'culet', from: [7.25, 4.5, 7.25], to: [8.75, 5.5, 8.75],
+        faces: { north: FACE([0, 0, 1.5, 1], '#body'), south: FACE([0, 0, 1.5, 1], '#body'),
+                 east: FACE([0, 0, 1.5, 1], '#body'), west: FACE([0, 0, 1.5, 1], '#body'),
+                 down: FACE([0, 0, 1.5, 1.5], '#body') } },
+      { name: 'pavilion_mid', from: [6.25, 5.5, 6.25], to: [9.75, 6.5, 9.75],
+        faces: { north: FACE([0, 0, 3.5, 1], '#body'), south: FACE([0, 0, 3.5, 1], '#body'),
+                 east: FACE([0, 0, 3.5, 1], '#body'), west: FACE([0, 0, 3.5, 1], '#body'),
+                 up: FACE([0, 0, 3.5, 3.5], '#body'), down: FACE([0, 0, 3.5, 3.5], '#body') } },
+      { name: 'pavilion_wide', from: [5.25, 6.5, 5.75], to: [10.75, 7.6, 10.25],
+        faces: { north: FACE([0, 0, 5.5, 1.1], '#body'), south: FACE([0, 0, 5.5, 1.1], '#body'),
+                 east: FACE([0, 0, 4.5, 1.1], '#body'), west: FACE([0, 0, 4.5, 1.1], '#body'),
+                 up: FACE([0, 0, 5.5, 4.5], '#body'), down: FACE([0, 0, 5.5, 4.5], '#body') } },
+      // Bright girdle band where pavilion meets crown.
+      { name: 'girdle', from: [4.9, 7.6, 5.55], to: [11.1, 8.0, 10.45],
+        faces: { north: FACE([0, 0, 6.2, 0.4], '#facet'), south: FACE([0, 0, 6.2, 0.4], '#facet'),
+                 east: FACE([0, 0, 4.9, 0.4], '#facet'), west: FACE([0, 0, 4.9, 0.4], '#facet') } },
+      // Crown: two steps up to the table.
+      { name: 'crown_lower', from: [5.5, 8.0, 6.0], to: [10.5, 9.4, 10.0],
+        faces: { north: FACE([0, 0, 5, 1.4], '#body'), south: FACE([0, 0, 5, 1.4], '#body'),
+                 east: FACE([0, 0, 4, 1.4], '#body'), west: FACE([0, 0, 4, 1.4], '#body'),
+                 up: FACE([0, 0, 5, 4], '#facet'), down: FACE([0, 0, 5, 4], '#body') } },
+      { name: 'crown_upper', from: [6.25, 9.4, 6.6], to: [9.75, 10.6, 9.4],
+        faces: { north: FACE([0, 0, 3.5, 1.2], '#facet'), south: FACE([0, 0, 3.5, 1.2], '#facet'),
+                 east: FACE([0, 0, 2.8, 1.2], '#facet'), west: FACE([0, 0, 2.8, 1.2], '#facet'),
+                 up: FACE([0, 0, 3.5, 2.8], '#facet'), down: FACE([0, 0, 3.5, 2.8], '#body') } },
       // Table facet on top.
-      { name: 'gem_table', from: [6.5, 11, 7], to: [9.5, 11.25, 9],
-        faces: { north: FACE([0, 0, 3, 0.25], '#facet'), south: FACE([0, 0, 3, 0.25], '#facet'),
-                 east: FACE([0, 0, 2, 0.25], '#facet'), west: FACE([0, 0, 2, 0.25], '#facet'),
-                 up: FACE([0, 0, 3, 2], '#facet'), down: FACE([0, 0, 3, 2], '#facet') } },
-      // Bright girdle line where the halves meet.
-      { name: 'gem_girdle', from: [4.9, 7.85, 5.9], to: [11.1, 8.15, 10.1],
-        faces: { north: FACE([0, 0, 6.2, 0.3], '#facet'), south: FACE([0, 0, 6.2, 0.3], '#facet'),
-                 east: FACE([0, 0, 4.2, 0.3], '#facet'), west: FACE([0, 0, 4.2, 0.3], '#facet') } },
-      // Translucent glow shell.
-      { name: 'gem_aura', from: [4.4, 4.4, 5.4], to: [11.6, 11.6, 10.6],
-        faces: { north: FACE([0, 0, 7.2, 7.2], '#glow'), south: FACE([0, 0, 7.2, 7.2], '#glow'),
-                 east: FACE([0, 0, 5.2, 7.2], '#glow'), west: FACE([0, 0, 5.2, 7.2], '#glow'),
-                 up: FACE([0, 0, 7.2, 5.2], '#glow'), down: FACE([0, 0, 7.2, 5.2], '#glow') } },
+      { name: 'table', from: [6.9, 10.6, 7.15], to: [9.1, 10.85, 8.85],
+        faces: { north: FACE([0, 0, 2.2, 0.25], '#facet'), south: FACE([0, 0, 2.2, 0.25], '#facet'),
+                 east: FACE([0, 0, 1.7, 0.25], '#facet'), west: FACE([0, 0, 1.7, 0.25], '#facet'),
+                 up: FACE([0, 0, 2.2, 1.7], '#facet'), down: FACE([0, 0, 2.2, 1.7], '#facet') } },
+      // Translucent glow shell — snugger than before so it reads as shine,
+      // not fog (alpha lives in the texture, default 64).
+      { name: 'gem_aura', from: [4.5, 4.0, 5.1], to: [11.5, 11.3, 10.9],
+        faces: { north: FACE([0, 0, 7, 7.3], '#glow'), south: FACE([0, 0, 7, 7.3], '#glow'),
+                 east: FACE([0, 0, 5.8, 7.3], '#glow'), west: FACE([0, 0, 5.8, 7.3], '#glow'),
+                 up: FACE([0, 0, 7, 5.8], '#glow'), down: FACE([0, 0, 7, 5.8], '#glow') } },
     ],
   };
   write(path.join('models', 'block', `civstone_${id}.json`),
@@ -238,31 +253,34 @@ function gauntletModel(gemId) {
   };
   if (gemId) textures.gem = `minecraft:block/civstone_${gemId}_body`;
   const elements = [
-    // Forearm cuff.
-    { name: 'cuff', from: [3.5, 1, 6.5], to: [12.5, 6, 9.5], faces: FACE4(9, 5, '#metal') },
+    // Tapered forearm cuff: wider at the elbow, narrowing to the wrist.
+    { name: 'cuff_lower', from: [4.25, 1, 6.75], to: [11.75, 3.5, 9.25], faces: FACE4(7.5, 2.5, '#metal') },
+    { name: 'cuff_upper', from: [3.75, 3.5, 6.5], to: [12.25, 6, 9.5], faces: FACE4(8.5, 2.5, '#metal') },
     // Cuff rim.
-    { name: 'cuff_rim', from: [3.25, 5.5, 6.25], to: [12.75, 7, 9.75], faces: FACE4(9.5, 1.5, '#gold') },
+    { name: 'cuff_rim', from: [3.5, 5.5, 6.3], to: [12.5, 7, 9.7], faces: FACE4(9, 1.5, '#gold') },
+    // Wrist joint between cuff and fist.
+    { name: 'wrist', from: [5.5, 6.6, 6.9], to: [10.5, 7.6, 9.1], faces: FACE4(5, 1, '#metal') },
     // Fist block.
-    { name: 'fist', from: [4.5, 7, 5.5], to: [11.5, 12.5, 10.5], faces: FACE4(7, 5.5, '#gold') },
-    // Finger plates across the top.
-    { name: 'fingers', from: [4.9, 12.5, 6], to: [11.1, 13.6, 10], faces: FACE4(6.2, 1.1, '#gold_light') },
-    // Knuckle studs.
-    { name: 'k1', from: [5.4, 13.1, 6.4], to: [6.4, 14.1, 7.4], faces: FACE4(1, 1, '#gold_light') },
-    { name: 'k2', from: [7.5, 13.1, 6.4], to: [8.5, 14.1, 7.4], faces: FACE4(1, 1, '#gold_light') },
-    { name: 'k3', from: [9.6, 13.1, 6.4], to: [10.6, 14.1, 7.4], faces: FACE4(1, 1, '#gold_light') },
+    { name: 'fist', from: [4.5, 7.6, 5.5], to: [11.5, 12.5, 10.5], faces: FACE4(7, 4.9, '#gold') },
+    // Four separated fingers with knuckle ridges.
+    { name: 'finger1', from: [5.0, 12.5, 6.1], to: [6.1, 14.5, 7.2], faces: FACE4(1.1, 2, '#gold_light') },
+    { name: 'finger2', from: [6.5, 12.5, 6.1], to: [7.6, 14.8, 7.2], faces: FACE4(1.1, 2.3, '#gold_light') },
+    { name: 'finger3', from: [8.0, 12.5, 6.1], to: [9.1, 14.8, 7.2], faces: FACE4(1.1, 2.3, '#gold_light') },
+    { name: 'finger4', from: [9.5, 12.5, 6.1], to: [10.6, 14.5, 7.2], faces: FACE4(1.1, 2, '#gold_light') },
     // Thumb guard.
-    { name: 'thumb', from: [2.9, 7.5, 6], to: [4.9, 10.5, 8.5], faces: FACE4(2, 3, '#metal') },
+    { name: 'thumb', from: [2.9, 7.8, 6], to: [4.9, 10.8, 8.5], faces: FACE4(2, 3, '#metal') },
   ];
   if (gemId) {
-    // Socket gem bursting from the back of the hand, in the stone's color.
+    // Socket gem bursting from the back of the hand, in the stone's color
+    // (scaled 1.2x about the gem center by default via --socket-scale).
     const socketEls = [
       {
-        name: 'socket_gem', from: [6.9, 8.6, 4.9], to: [9.1, 10.8, 5.7],
-        faces: FACE4(2.2, 2.2, gemTex),
+        name: 'socket_gem', from: [6.8, 8.4, 4.7], to: [9.2, 10.8, 5.6],
+        faces: FACE4(2.4, 2.4, gemTex),
       },
       {
-        name: 'socket_glow', from: [6.4, 8.1, 4.5], to: [9.6, 11.3, 4.95],
-        faces: FACE4(3.2, 3.2, '#gem_glow'),
+        name: 'socket_glow', from: [6.2, 7.8, 4.3], to: [9.8, 11.4, 4.75],
+        faces: FACE4(3.6, 3.6, '#gem_glow'),
       },
     ];
     elements.push(...scaleElements(socketEls, SOCKET_SCALE));
