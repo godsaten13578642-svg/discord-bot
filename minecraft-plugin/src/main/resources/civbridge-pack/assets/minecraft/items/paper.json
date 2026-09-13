@@ -78,77 +78,77 @@
         "when": "civbridge:fandom_parkour_boots",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/parkour_boots"
+          "model": "minecraft:block/civfandom_parkour_boots"
         }
       },
       {
         "when": "civbridge:fandom_no_scope_eyes",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/no_scope_eyes"
+          "model": "minecraft:block/civfandom_no_scope_eyes"
         }
       },
       {
         "when": "civbridge:fandom_hidden_leaf_headband",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/hidden_leaf_headband"
+          "model": "minecraft:block/civfandom_hidden_leaf_headband"
         }
       },
       {
         "when": "civbridge:fandom_summoning_scroll",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/summoning_scroll"
+          "model": "minecraft:block/civfandom_summoning_scroll"
         }
       },
       {
         "when": "civbridge:fandom_ninja_star",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/ninja_star"
+          "model": "minecraft:block/civfandom_ninja_star"
         }
       },
       {
         "when": "civbridge:fandom_rasengan",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/rasengan"
+          "model": "minecraft:block/civfandom_rasengan"
         }
       },
       {
         "when": "civbridge:fandom_chidori_blade",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/chidori_blade"
+          "model": "minecraft:block/civfandom_chidori_blade"
         }
       },
       {
         "when": "civbridge:fandom_angel_blade",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/angel_blade"
+          "model": "minecraft:block/civfandom_angel_blade"
         }
       },
       {
         "when": "civbridge:fandom_first_blade",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/first_blade"
+          "model": "minecraft:block/civfandom_first_blade"
         }
       },
       {
         "when": "civbridge:fandom_deaths_scythe",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/deaths_scythe"
+          "model": "minecraft:block/civfandom_deaths_scythe"
         }
       },
       {
         "when": "civbridge:fandom_the_colt",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/the_colt"
+          "model": "minecraft:block/civfandom_the_colt"
         }
       },
       {

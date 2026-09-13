@@ -8,28 +8,28 @@
         "when": "civbridge:fandom_parkour_boots",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/parkour_boots"
+          "model": "minecraft:block/civfandom_parkour_boots"
         }
       },
       {
         "when": "civbridge:fandom_no_scope_eyes",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/no_scope_eyes"
+          "model": "minecraft:block/civfandom_no_scope_eyes"
         }
       },
       {
         "when": "civbridge:fandom_hidden_leaf_headband",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/hidden_leaf_headband"
+          "model": "minecraft:block/civfandom_hidden_leaf_headband"
         }
       },
       {
         "when": "civbridge:fandom_summoning_scroll",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/summoning_scroll"
+          "model": "minecraft:block/civfandom_summoning_scroll"
         }
       }
     ],

@@ -8,21 +8,21 @@
         "when": "civbridge:fandom_first_blade",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/first_blade"
+          "model": "minecraft:block/civfandom_first_blade"
         }
       },
       {
         "when": "civbridge:fandom_deaths_scythe",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/deaths_scythe"
+          "model": "minecraft:block/civfandom_deaths_scythe"
         }
       },
       {
         "when": "civbridge:fandom_the_colt",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/the_colt"
+          "model": "minecraft:block/civfandom_the_colt"
         }
       }
     ],

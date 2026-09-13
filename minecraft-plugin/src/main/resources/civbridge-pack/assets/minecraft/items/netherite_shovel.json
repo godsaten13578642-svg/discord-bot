@@ -8,28 +8,28 @@
         "when": "civbridge:fandom_ninja_star",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/ninja_star"
+          "model": "minecraft:block/civfandom_ninja_star"
         }
       },
       {
         "when": "civbridge:fandom_rasengan",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/rasengan"
+          "model": "minecraft:block/civfandom_rasengan"
         }
       },
       {
         "when": "civbridge:fandom_chidori_blade",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/chidori_blade"
+          "model": "minecraft:block/civfandom_chidori_blade"
         }
       },
       {
         "when": "civbridge:fandom_angel_blade",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/fandom/angel_blade"
+          "model": "minecraft:block/civfandom_angel_blade"
         }
       }
     ],
