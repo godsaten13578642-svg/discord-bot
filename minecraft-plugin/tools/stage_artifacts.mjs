@@ -30,16 +30,29 @@ fs.mkdirSync(ARTIFACTS, { recursive: true });
 // ── Plugin jar ──────────────────────────────────────────────────────────────
 // Prefer the shaded/final jar from a fresh local build; fall back to the copy
 // committed in the repo (Render builds can't run Maven).
+// NOTE: selection is by PARSED VERSION, not mtime — on a fresh clone (Render)
+// every file has the same checkout timestamp, and an mtime tie would silently
+// pick CivBridge-1.0.0.jar over 1.1.0 (alphabetical). Been there, fixed that.
+const parseVer = name => (name.match(/CivBridge-([\d.]+)\.jar/) || [])[1] || '';
+const verKey = v => v.split('.').map(n => parseInt(n, 10) || 0);
 const targetDir = path.join(PLUGIN_DIR, 'target');
 const candidates = fs.existsSync(targetDir)
   ? fs.readdirSync(targetDir)
       .filter(f => f.startsWith('CivBridge-') && f.endsWith('.jar') && !f.startsWith('original-'))
-      .sort((a, b) => fs.statSync(path.join(targetDir, b)).mtimeMs - fs.statSync(path.join(targetDir, a)).mtimeMs)
+      .sort((a, b) => {
+        const va = verKey(parseVer(a)), vb = verKey(parseVer(b));
+        for (let i = 0; i < Math.max(va.length, vb.length); i++) {
+          const d = (va[i] || 0) - (vb[i] || 0);
+          if (d) return -d; // higher version first
+        }
+        return fs.statSync(path.join(targetDir, b)).mtimeMs - fs.statSync(path.join(targetDir, a)).mtimeMs;
+      })
   : [];
 
 let jar = null;
 if (candidates.length) {
   jar = { from: path.join(targetDir, candidates[0]), name: candidates[0] };
+  console.log('  (target jar picked:', candidates[0] + ')');
 } else {
   const committed = path.join(ARTIFACTS, 'CivBridge.jar');
   if (fs.existsSync(committed)) jar = { from: committed, name: 'CivBridge.jar (from repo)' };
