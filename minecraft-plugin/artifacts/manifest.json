@@ -1,18 +1,18 @@
 {
-  "generatedAt": "2026-09-13T21:16:03.867Z",
+  "generatedAt": "2026-09-13T21:25:54.435Z",
   "plugin": {
     "file": "CivBridge.jar",
-    "sizeBytes": 742440,
-    "size": "725 KB",
-    "sha1": "01883a22b451d4d6714ed5bad8b18e691ebf9a73",
-    "builtAt": "2026-09-13T21:16:02.624Z",
+    "sizeBytes": 804084,
+    "size": "785 KB",
+    "sha1": "178d987d770515e640981903092a8f944e74d03a",
+    "builtAt": "2026-09-13T21:25:53.372Z",
     "version": "1.1.0"
   },
   "pack": {
     "file": "civbridge-pack.zip",
-    "sizeBytes": 49225,
-    "size": "48 KB",
-    "sha1": "c6b41934b80d29bb28e924f65918a500e9d32ab6",
-    "updatedAt": "2026-09-13T21:15:20.907Z"
+    "sizeBytes": 85596,
+    "size": "84 KB",
+    "sha1": "45686d62ce0c7d791ccf97dcc8b7e8324d052882",
+    "updatedAt": "2026-09-13T21:25:20.265Z"
   }
 }

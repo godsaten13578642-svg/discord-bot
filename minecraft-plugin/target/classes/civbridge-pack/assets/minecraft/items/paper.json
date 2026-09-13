@@ -36,42 +36,42 @@
         "when": "custom_swords:anakin_blue",
         "model": {
           "type": "minecraft:model",
-          "model": "custom_swords:item/anakin_blue"
+          "model": "minecraft:block/civblade_blue"
         }
       },
       {
         "when": "custom_swords:anakin_green",
         "model": {
           "type": "minecraft:model",
-          "model": "custom_swords:item/anakin_green"
+          "model": "minecraft:block/civblade_green"
         }
       },
       {
         "when": "custom_swords:anakin_purple",
         "model": {
           "type": "minecraft:model",
-          "model": "custom_swords:item/anakin_purple"
+          "model": "minecraft:block/civblade_purple"
         }
       },
       {
         "when": "custom_swords:anakin_dark",
         "model": {
           "type": "minecraft:model",
-          "model": "custom_swords:item/anakin_dark"
+          "model": "minecraft:block/civblade_dark"
         }
       },
       {
         "when": "custom_swords:anakin_red",
         "model": {
           "type": "minecraft:model",
-          "model": "custom_swords:item/anakin_red"
+          "model": "minecraft:block/civblade_red"
         }
       },
       {
         "when": "custom_swords:anakin_white",
         "model": {
           "type": "minecraft:model",
-          "model": "custom_swords:item/anakin_white"
+          "model": "minecraft:block/civblade_white"
         }
       },
       {
