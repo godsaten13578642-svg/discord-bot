@@ -117,6 +117,20 @@ function crc32(buf) {
 }
 
 // ── Build ────────────────────────────────────────────────────────────────────
+// Ensure the generated 3D models (stones, gauntlet, fandom) always carry fresh
+// display transforms before zipping — re-running is idempotent, and it keeps
+// a regeneration + rebuild one command instead of two.
+{
+  const { spawnSync } = await import('node:child_process');
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'tools', 'add_display_transforms.mjs')], { stdio: 'inherit' });
+  if (r.status !== 0) {
+    console.error('✗ display-transform injection failed — pack NOT built.');
+    process.exit(1);
+  }
+  // The injection rewrites source JSONs; rebuild determinism stamps mtimes of
+  // changed files, which is exactly what we want.
+}
+
 const files = listFiles(SRC).filter(f => !f.endsWith('.gitkeep'));
 fs.mkdirSync(OUT_DIR, { recursive: true });
 const zip = buildZip(files);
