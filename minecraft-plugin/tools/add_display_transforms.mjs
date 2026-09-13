@@ -143,7 +143,12 @@ for (const [id, cfg] of Object.entries(MODEL_CONFIG)) {
   }
   model.display = disp;
 
-  fs.writeFileSync(file, JSON.stringify(model, null, 1) + '\n');
+  // Write only when the serialized content actually differs — rewriting would
+  // touch the file's mtime, and the deterministic zip stamp uses the newest
+  // source mtime, so blind writes would change the pack SHA-1 every build
+  // and force clients to re-download for nothing.
+  const out = JSON.stringify(model, null, 1) + '\n';
+  if (fs.readFileSync(file, 'utf8') !== out) fs.writeFileSync(file, out);
   changed++;
 }
 console.log(`✓ display transforms written for ${changed}/${Object.keys(MODEL_CONFIG).length} models`);
