@@ -45,6 +45,10 @@ commands:
     description: Spawn the custom fandom bosses (Twelve Kizuki demon, Leviathan)
     usage: /boss <id> [player]
     permission: civbridge.boss
+  civgui:
+    description: Open the ReactSMP custom items menu
+    usage: /civgui
+    permission: civbridge.gui
 
 permissions:
   civbridge.admin:
@@ -64,4 +68,7 @@ permissions:
     default: op
   civbridge.boss:
     description: Spawn custom fandom bosses via /boss
+    default: op
+  civbridge.gui:
+    description: Open the ReactSMP items menu via /civgui
     default: op

@@ -13,6 +13,7 @@ import com.civbot.commands.ReactCommand;
 import com.civbot.commands.SaberCommand;
 import com.civbot.infinity.GauntletListener;
 import com.civbot.fandom.FandomListener;
+import com.civbot.gui.CivGui;
 import com.civbot.lightsaber.ResourcePackListener;
 import com.civbot.lightsaber.SaberListener;
 import com.civbot.pack.EmbeddedPackServer;
@@ -103,6 +104,18 @@ public class CivBridgePlugin extends JavaPlugin {
         BossCommand boss = new BossCommand(this);
         getCommand("boss").setExecutor(boss);
         getCommand("boss").setTabCompleter(boss);
+
+        // ── ReactSMP items GUI (/civgui) ────────────────────────────────────
+        CivGui gui = new CivGui(this);
+        getServer().getPluginManager().registerEvents(gui, this);
+        getCommand("civgui").setExecutor((sender, cmd, label, args) -> {
+            if (sender instanceof org.bukkit.entity.Player player) {
+                gui.open(player);
+            } else {
+                sender.sendMessage("§cOnly players can open the items menu.");
+            }
+            return true;
+        });
 
         // Resource pack (lightsaber models/textures). By default the plugin
         // hosts the pack ITSELF over a tiny embedded HTTP server on the same

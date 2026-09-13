@@ -8,6 +8,7 @@ com\civbot\infinity\GauntletListener$TimeSnapshot.class
 com\civbot\lightsaber\ResourcePackListener.class
 com\civbot\infinity\InfinityFactory.class
 com\civbot\commands\FandomCommand$1.class
+com\civbot\gui\CivGui$Entry.class
 com\civbot\infinity\GauntletListener$MindLink.class
 com\civbot\commands\FandomCommand.class
 com\civbot\fandom\FandomFactory.class
@@ -41,5 +42,6 @@ com\civbot\bosses\BossListener$1.class
 com\civbot\commands\BossCommand.class
 com\civbot\bosses\BossListener.class
 com\civbot\commands\SaberCommand.class
+com\civbot\gui\CivGui.class
 com\civbot\fandom\FandomListener.class
 com\civbot\bosses\BossManager$1.class
