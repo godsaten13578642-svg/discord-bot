@@ -112,11 +112,26 @@ public final class CivGui implements Listener {
     }
 
     private ItemStack crown() {
-        return named(new ItemStack(Material.GOLDEN_HELMET), "§6♚ §7ReactSMP §8• §7Custom Items");
+        return withCmd(named(new ItemStack(Material.GOLDEN_HELMET),
+            "§6♚ §7ReactSMP §8• §7Custom Items"), "reactsmp:crown");
     }
 
     private ItemStack spark() {
-        return named(new ItemStack(Material.NETHER_STAR), "§b✦ §fReactSMP");
+        return withCmd(named(new ItemStack(Material.NETHER_STAR), "§b✦ §fReactSMP"), "reactsmp:spark");
+    }
+
+    /** Applies a string CMD so the resource pack swaps in the logo-extracted model. */
+    private ItemStack withCmd(ItemStack item, String cmd) {
+        try {
+            var meta = item.getItemMeta();
+            var component = meta.getCustomModelDataComponent();
+            component.setStrings(List.of(cmd));
+            meta.setCustomModelDataComponent(component);
+            item.setItemMeta(meta);
+        } catch (Throwable ignored) {
+            // Pre-1.21.4: fall back to the plain item (name still reads fine).
+        }
+        return item;
     }
 
     /** A category tab: themed icon, glints when it's the section you're on. */
