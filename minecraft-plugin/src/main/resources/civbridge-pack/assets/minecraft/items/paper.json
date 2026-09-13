@@ -155,91 +155,91 @@
         "when": "civbridge:infinity_stone_space",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/stone_space"
+          "model": "minecraft:block/civstone_space"
         }
       },
       {
         "when": "civbridge:infinity_stone_mind",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/stone_mind"
+          "model": "minecraft:block/civstone_mind"
         }
       },
       {
         "when": "civbridge:infinity_stone_reality",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/stone_reality"
+          "model": "minecraft:block/civstone_reality"
         }
       },
       {
         "when": "civbridge:infinity_stone_power",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/stone_power"
+          "model": "minecraft:block/civstone_power"
         }
       },
       {
         "when": "civbridge:infinity_stone_time",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/stone_time"
+          "model": "minecraft:block/civstone_time"
         }
       },
       {
         "when": "civbridge:infinity_stone_soul",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/stone_soul"
+          "model": "minecraft:block/civstone_soul"
         }
       },
       {
         "when": "civbridge:gauntlet_empty",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/gauntlet_empty"
+          "model": "minecraft:block/civgauntlet_empty"
         }
       },
       {
         "when": "civbridge:gauntlet_space",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/gauntlet_space"
+          "model": "minecraft:block/civgauntlet_space"
         }
       },
       {
         "when": "civbridge:gauntlet_mind",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/gauntlet_mind"
+          "model": "minecraft:block/civgauntlet_mind"
         }
       },
       {
         "when": "civbridge:gauntlet_reality",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/gauntlet_reality"
+          "model": "minecraft:block/civgauntlet_reality"
         }
       },
       {
         "when": "civbridge:gauntlet_power",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/gauntlet_power"
+          "model": "minecraft:block/civgauntlet_power"
         }
       },
       {
         "when": "civbridge:gauntlet_time",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/gauntlet_time"
+          "model": "minecraft:block/civgauntlet_time"
         }
       },
       {
         "when": "civbridge:gauntlet_soul",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/gauntlet_soul"
+          "model": "minecraft:block/civgauntlet_soul"
         }
       }
     ],

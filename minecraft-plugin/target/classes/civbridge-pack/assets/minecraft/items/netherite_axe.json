@@ -8,42 +8,42 @@
         "when": "civbridge:infinity_stone_space",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/stone_space"
+          "model": "minecraft:block/civstone_space"
         }
       },
       {
         "when": "civbridge:infinity_stone_mind",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/stone_mind"
+          "model": "minecraft:block/civstone_mind"
         }
       },
       {
         "when": "civbridge:infinity_stone_reality",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/stone_reality"
+          "model": "minecraft:block/civstone_reality"
         }
       },
       {
         "when": "civbridge:infinity_stone_power",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/stone_power"
+          "model": "minecraft:block/civstone_power"
         }
       },
       {
         "when": "civbridge:infinity_stone_time",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/stone_time"
+          "model": "minecraft:block/civstone_time"
         }
       },
       {
         "when": "civbridge:infinity_stone_soul",
         "model": {
           "type": "minecraft:model",
-          "model": "civbridge:item/infinity/stone_soul"
+          "model": "minecraft:block/civstone_soul"
         }
       }
     ],
