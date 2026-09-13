@@ -32,6 +32,7 @@ com\civbot\bosses\BossManager$1.class
 com\civbot\commands\CivCommand.class
 com\civbot\commands\ReactCommand.class
 com\civbot\fandom\FandomListener$2.class
+com\civbot\infinity\GauntletListener$5.class
 com\civbot\infinity\InfinityFactory.class
 com\civbot\infinity\GauntletListener$4.class
 com\civbot\infinity\InfinityStone.class

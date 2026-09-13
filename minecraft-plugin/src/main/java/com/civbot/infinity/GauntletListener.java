@@ -99,6 +99,62 @@ public class GauntletListener implements Listener {
                 });
             }
         }.runTaskTimer(plugin, 40L, 20L);
+
+        // Held-item ambience: a glowing hand while the gauntlet is worn in the
+        // off-hand. Shimmer when empty, the dominant socketed stone's color
+        // once powered, a slow rainbow plus rising sparks with all six. Every
+        // 6 ticks (~0.3s) — visible but cheap.
+        new BukkitRunnable() {
+            int tick = 0;
+
+            @Override public void run() {
+                tick += 6;
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    ItemStack off = p.getInventory().getItemInOffHand();
+                    if (!InfinityFactory.isGauntlet(off)) continue;
+                    // Skip spectators: ambience shouldn't reveal cloaked admins.
+                    if (p.getGameMode() == GameMode.SPECTATOR) continue;
+
+                    org.bukkit.Location hand = p.getLocation().clone().add(0, 1.1, 0);
+                    Vector side = p.getLocation().getDirection()
+                        .crossProduct(new Vector(0, 1, 0)).normalize().multiply(-0.45);
+                    hand.add(side);
+
+                    List<InfinityStone> socketed = InfinityFactory.readSockets(off, socketsKey);
+                    World w = p.getWorld();
+                    if (socketed.size() >= InfinityStone.values().length) {
+                        // Complete gauntlet: slow rainbow shimmer + rising sparks.
+                        Particle dust = Particle.DUST;
+                        org.bukkit.Particle.DustOptions rainbow = new org.bukkit.Particle.DustOptions(
+                            org.bukkit.Color.fromRGB(java.awt.Color.HSBtoRGB((tick % 60) / 60f, 0.8f, 1f)), 1.0f);
+                        w.spawnParticle(dust, hand, 2, 0.12, 0.18, 0.12, rainbow);
+                        if (tick % 12 == 0) w.spawnParticle(Particle.END_ROD, hand, 1, 0.1, 0.1, 0.1, 0.012);
+                    } else if (!socketed.isEmpty()) {
+                        // Powered: shimmer in the last-socketed stone's color.
+                        org.bukkit.Color c = chatColorToRgb(socketed.get(socketed.size() - 1).color());
+                        w.spawnParticle(Particle.DUST, hand, 2, 0.1, 0.15, 0.1,
+                            new org.bukkit.Particle.DustOptions(c, 1.0f));
+                    } else {
+                        // Empty: faint golden shimmer.
+                        w.spawnParticle(Particle.DUST, hand, 1, 0.08, 0.12, 0.08,
+                            new org.bukkit.Particle.DustOptions(org.bukkit.Color.fromRGB(0xE8B23A), 0.8f));
+                    }
+                }
+            }
+        }.runTaskTimer(plugin, 30L, 6L);
+    }
+
+    /** Bukkit ChatColors don't carry RGB — map each stone to its canonical color. */
+    private static org.bukkit.Color chatColorToRgb(org.bukkit.ChatColor color) {
+        return switch (color) {
+            case AQUA -> org.bukkit.Color.fromRGB(0x96B4FF);
+            case YELLOW -> org.bukkit.Color.fromRGB(0xFFF08C);
+            case RED -> org.bukkit.Color.fromRGB(0xFF7D87);
+            case LIGHT_PURPLE -> org.bukkit.Color.fromRGB(0xDC82FF);
+            case GREEN -> org.bukkit.Color.fromRGB(0x96FFAF);
+            case GOLD -> org.bukkit.Color.fromRGB(0xFFC373);
+            default -> org.bukkit.Color.fromRGB(0xE8B23A);
+        };
     }
 
     // ── Interaction entry point ──────────────────────────────────────────────
