@@ -41,7 +41,13 @@ function buildZip(files) {
   const chunks = [];
   const central = [];
   let offset = 0;
-  const now = dosDateTime(new Date());
+  // Deterministic builds: stamp entries with the newest source file's mtime
+  // (truncated to the 2-second DOS resolution) instead of wall-clock time, so
+  // rebuilding unchanged sources yields byte-identical zips and a stable SHA-1
+  // (Minecraft uses the SHA-1 to decide whether clients re-download).
+  let newest = 0;
+  for (const f of files) newest = Math.max(newest, fs.statSync(f).mtimeMs);
+  const stamp = dosDateTime(new Date(Math.floor(newest / 2000) * 2000));
 
   for (const file of files) {
     const nameBytes = Buffer.from(path.relative(SRC, file).replaceAll('\\', '/'), 'utf8');
@@ -56,8 +62,8 @@ function buildZip(files) {
     local.writeUInt16LE(20, 4);          // version needed
     local.writeUInt16LE(0x0800, 6);      // UTF-8 names
     local.writeUInt16LE(useDeflate ? 8 : 0, 8);
-    local.writeUInt16LE(now.time, 10);
-    local.writeUInt16LE(now.date, 12);
+    local.writeUInt16LE(stamp.time, 10);
+    local.writeUInt16LE(stamp.date, 12);
     local.writeUInt32LE(crc, 14);
     local.writeUInt32LE(data.length, 18);
     local.writeUInt32LE(raw.length, 22);
@@ -71,8 +77,8 @@ function buildZip(files) {
     cd.writeUInt16LE(20, 6);
     cd.writeUInt16LE(0x0800, 8);
     cd.writeUInt16LE(useDeflate ? 8 : 0, 10);
-    cd.writeUInt16LE(now.time, 12);
-    cd.writeUInt16LE(now.date, 14);
+    cd.writeUInt16LE(stamp.time, 12);
+    cd.writeUInt16LE(stamp.date, 14);
     cd.writeUInt32LE(crc, 16);
     cd.writeUInt32LE(data.length, 20);
     cd.writeUInt32LE(raw.length, 24);
