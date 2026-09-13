@@ -131,8 +131,11 @@ public class GauntletListener implements Listener {
                         Particle dust = Particle.DUST;
                         org.bukkit.Particle.DustOptions rainbow = new org.bukkit.Particle.DustOptions(
                             org.bukkit.Color.fromRGB(java.awt.Color.HSBtoRGB((tick % 60) / 60f, 0.8f, 1f)), 1.0f);
-                        w.spawnParticle(dust, hand, 2, 0.12, 0.18, 0.12, rainbow);
-                        if (tick % 12 == 0) w.spawnParticle(Particle.END_ROD, hand, 1, 0.1, 0.1, 0.1, 0.012);
+                        // Complete gauntlet is the busy one — dialed back:
+                        // single tighter dust + rarer sparks so the hum and
+                        // rainbow carry it without fogging the hand.
+                        w.spawnParticle(dust, hand, 1, 0.08, 0.12, 0.08, rainbow);
+                        if (tick % 20 == 0) w.spawnParticle(Particle.END_ROD, hand, 1, 0.08, 0.08, 0.08, 0.012);
                         if (tick % 36 == 0) {
                             float pitch = 0.62f + 0.06f * (float) Math.sin(Math.toRadians(tick * 3));
                             w.playSound(hand, Sound.BLOCK_BEACON_AMBIENT,
@@ -140,13 +143,15 @@ public class GauntletListener implements Listener {
                         }
                     } else if (!socketed.isEmpty()) {
                         // Powered: shimmer in the last-socketed stone's color.
+                        // Denser and wider than before so it clearly reads.
                         org.bukkit.Color c = chatColorToRgb(socketed.get(socketed.size() - 1).color());
-                        w.spawnParticle(Particle.DUST, hand, 2, 0.1, 0.15, 0.1,
-                            new org.bukkit.Particle.DustOptions(c, 1.0f));
+                        w.spawnParticle(Particle.DUST, hand, 3, 0.14, 0.2, 0.14,
+                            new org.bukkit.Particle.DustOptions(c, 1.2f));
                     } else {
-                        // Empty: faint golden shimmer.
-                        w.spawnParticle(Particle.DUST, hand, 1, 0.08, 0.12, 0.08,
-                            new org.bukkit.Particle.DustOptions(org.bukkit.Color.fromRGB(0xE8B23A), 0.8f));
+                        // Empty: golden shimmer — doubled count and wider spread
+                        // so the "this item is special" cue is actually visible.
+                        w.spawnParticle(Particle.DUST, hand, 2, 0.12, 0.16, 0.12,
+                            new org.bukkit.Particle.DustOptions(org.bukkit.Color.fromRGB(0xE8B23A), 1.1f));
                     }
                 }
             }
