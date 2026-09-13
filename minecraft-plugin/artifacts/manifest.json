@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-09-13T21:30:52.580Z",
+  "generatedAt": "2026-09-13T21:32:16.548Z",
   "plugin": {
     "file": "CivBridge.jar",
-    "sizeBytes": 812119,
+    "sizeBytes": 812121,
     "size": "793 KB",
-    "sha1": "c3b75f7f4019f05a1ec6f2cb30db90d7acdc34e5",
-    "builtAt": "2026-09-13T21:30:46.263Z",
+    "sha1": "4a939db1cc89c2cd9c30a5387382bc5db4791c1a",
+    "builtAt": "2026-09-13T21:32:15.787Z",
     "version": "1.1.0"
   },
   "pack": {

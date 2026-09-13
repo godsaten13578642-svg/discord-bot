@@ -99,7 +99,7 @@ public final class CivGui implements Listener {
     }
 
     private ItemStack filler() {
-        return named(new ItemStack(Material.GRAY_STAINED_GLASS_PANE), "§r");
+        return named(new ItemStack(Material.BLACK_STAINED_GLASS_PANE), "§r");
     }
 
     private ItemStack crown() {
@@ -217,7 +217,7 @@ public final class CivGui implements Listener {
         }
 
         // Any non-glass click inside the grid = give that item.
-        if (isGridSlot(event.getSlot()) && clicked.getType() != Material.GRAY_STAINED_GLASS_PANE) {
+        if (isGridSlot(event.getSlot()) && clicked.getType() != Material.BLACK_STAINED_GLASS_PANE) {
             player.getInventory().addItem(clicked.clone()).forEach((slot, left) ->
                 player.getWorld().dropItemNaturally(player.getLocation(), left));
             player.sendMessage("§d✦ §7Received §f" + clicked.getItemMeta().getDisplayName() + "§7.");
