@@ -441,6 +441,53 @@ for a fandom-weapon kill — an **Angel Blade** plus a 33% **The Colt**.
 
 ---
 
+## Resource Pack Troubleshooting (26.x clients)
+
+If a custom item shows as a plain vanilla item, work down this list in order.
+
+**1. Confirm the pack is actually applied**
+- In game: `/civpack` — must show an active pack; admins also see URL + SHA-1
+- `Options → Resource Packs` must list CivBridge as **selected**
+
+**2. Re-prompt without rejoining**
+- `/civpack reload` re-sends the pack prompt to you (console: everyone)
+
+**3. Force an asset reload**
+- Press `F3+T`. Most "it's stuck vanilla" cases are a stale client cache.
+
+**4. Verify WHICH pack your client holds**
+- `Options → Resource Packs → CivBridge → ` the pack version in its tooltip
+- The current build is `pack_format: 64`, SHA-1 `5897761635cc3f5190a03c939678d1f0229bea19`
+- Old cached copy (format 46 or a different SHA-1)? Remove it, `/civpack reload`, accept the prompt
+
+**5. Verify the server runs the current jar**
+- `/civpack` shows the source; compare the jar SHA-1 from the dashboard
+  Downloads tab (`/api/downloads`) with the jar file you dropped in `plugins/`
+
+**6. Test the pack with a vanilla command (no plugin involvement)**
+
+```mcfunction
+/give @p paper[minecraft:custom_model_data={strings:["light_sabor_blue_item"]}]
+/give @p paper[minecraft:custom_model_data={strings:["custom_swords:anakin_green"]}]
+/give @p paper[minecraft:custom_model_data={strings:["reactsmp:crown"]}]
+```
+
+- **These render but plugin items don't** → the pack is fine; the plugin is
+  old (update the jar) or the item lost its CMD (re-give it)
+- **These render as plain paper** → the pack isn't on the client; go back to 1
+
+**7. Still broken? Check the accepted-pack state**
+- Server settings can force-accept packs; a declined prompt means no textures
+- Multi-player check: if other players see items correctly, it's client-local
+  (cache or declined prompt), not the server
+
+Every build is validated automatically (selectors → models → textures for
+all 36 CMD ids), so a structurally broken pack can no longer ship — if
+everything above checks out and an item is still vanilla-looking, report
+which item and which command produced it.
+
+---
+
 ## Bot Permissions Required
 
 Make sure the bot has **Manage Roles** and **Manage Channels** in your Discord server
