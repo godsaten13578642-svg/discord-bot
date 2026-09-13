@@ -12,6 +12,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -29,21 +30,24 @@ import java.util.UUID;
 /**
  * ReactSMP-themed item menu, opened with /civgui.
  *
- * Styled after the ReactSMP logo: black backdrop, purple neon border on the
- * left edge fading to cyan on the right, a crown marker up top, and a bright
- * "spark" separator. Two pages — Sabers & Infinity, then Fandom — plus a
- * "give one of everything" button. Clicks hand out the REAL plugin items
- * (same factories as /saber, /infinity and /fandom), so powers, lore and
+ * Styled after the ReactSMP logo: black backdrop, purple neon border fading to
+ * cyan, a crown marker, and a bright "spark" separator. Three sections —
+ * Sabers, Infinity and Fandom — selectable via tab buttons in the header that
+ * jump straight to each category. Clicks hand out the REAL plugin items (same
+ * factories as /saber, /infinity and /fandom), so powers, lore and
  * resource-pack models all come along.
  */
 public final class CivGui implements Listener {
 
-    private static final String TITLE = "§8☾ §d§lReact§b§lSMP §7Items §8— §dPage %d§7/§b%d";
+    private static final String TITLE = "§8☾ §d§lReact§b§lSMP §7— §f%s";
+
+    private static final String[] SECTION_NAMES = { "Sabers", "Infinity", "Fandom" };
+    private static final String TAB_PREFIX = "▶ "; // stripped-name match key for tabs
 
     private final CivBridgePlugin plugin;
     private final NamespacedKey stoneKey;
-    private final Map<UUID, Integer> page = new HashMap<>();
-    private final Map<UUID, List<Inventory>> pages = new HashMap<>();
+    private final Map<UUID, Inventory[]> pages = new HashMap<>();
+    private final Map<UUID, Integer> section = new HashMap<>();
 
     public CivGui(CivBridgePlugin plugin) {
         this.plugin = plugin;
@@ -53,32 +57,38 @@ public final class CivGui implements Listener {
     // ── Open ─────────────────────────────────────────────────────────────────
 
     public void open(Player player) {
-        List<Inventory> invs = buildPages();
+        Inventory[] invs = buildAll();
         pages.put(player.getUniqueId(), invs);
-        page.put(player.getUniqueId(), 0);
-        player.openInventory(invs.get(0));
+        section.put(player.getUniqueId(), 0);
+        player.openInventory(invs[0]);
         player.playSound(player.getLocation(), Sound.BLOCK_ENDER_CHEST_OPEN, 0.6f, 1.4f);
     }
 
     // ── Entries ──────────────────────────────────────────────────────────────
 
-    private record Entry(String label, String hint, ItemStack item) {}
+    private record Entry(String hint, ItemStack item) {}
 
-    private List<Entry> entries() {
+    private List<Entry> saberEntries() {
         List<Entry> out = new ArrayList<>();
         for (LightsaberType t : LightsaberType.values()) {
-            out.add(new Entry(t.color() + "" + ChatColor.BOLD + t.displayName(),
-                "§7✦ " + t.attackDamage() + " blade damage", LightsaberFactory.create(t)));
+            out.add(new Entry("§7✦ " + t.attackDamage() + " blade damage", LightsaberFactory.create(t)));
         }
+        return out;
+    }
+
+    private List<Entry> infinityEntries() {
+        List<Entry> out = new ArrayList<>();
         for (InfinityStone s : InfinityStone.values()) {
-            out.add(new Entry(s.color() + "" + ChatColor.BOLD + s.displayName(),
-                "§7Right-click gauntlet to socket", InfinityFactory.createStone(s, stoneKey)));
+            out.add(new Entry("§7Right-click gauntlet to socket", InfinityFactory.createStone(s, stoneKey)));
         }
-        out.add(new Entry(ChatColor.GOLD + "" + ChatColor.BOLD + "Infinity Gauntlet",
-            "§7Socket stones in the off-hand", InfinityFactory.createGauntlet(stoneKey)));
+        out.add(new Entry("§7Socket stones in the off-hand", InfinityFactory.createGauntlet(stoneKey)));
+        return out;
+    }
+
+    private List<Entry> fandomEntries() {
+        List<Entry> out = new ArrayList<>();
         for (FandomType t : FandomType.values()) {
-            out.add(new Entry(t.color() + "" + ChatColor.BOLD + t.displayName(),
-                "§7Fandom item — powers included", FandomFactory.create(t)));
+            out.add(new Entry("§7Fandom item — powers included", FandomFactory.create(t)));
         }
         return out;
     }
@@ -94,8 +104,7 @@ public final class CivGui implements Listener {
             : t < 0.7 ? Material.BLUE_STAINED_GLASS_PANE
             : t < 0.9 ? Material.LIGHT_BLUE_STAINED_GLASS_PANE
             : Material.CYAN_STAINED_GLASS_PANE;
-        return named(new ItemStack(mat),
-            "§x§9§d§4§e§f§f▮ §7ReactSMP");
+        return named(new ItemStack(mat), "§x§9§d§4§e§f§f▮ §7ReactSMP");
     }
 
     private ItemStack filler() {
@@ -108,6 +117,24 @@ public final class CivGui implements Listener {
 
     private ItemStack spark() {
         return named(new ItemStack(Material.NETHER_STAR), "§b✦ §fReactSMP");
+    }
+
+    /** A category tab: themed icon, glints when it's the section you're on. */
+    private ItemStack tab(int index, boolean active) {
+        ItemStack icon = switch (index) {
+            case 0 -> LightsaberFactory.create(LightsaberType.ANAKIN_BLUE);
+            case 1 -> InfinityFactory.createGauntlet(stoneKey);
+            default -> FandomFactory.create(FandomType.THE_COLT);
+        };
+        ItemMeta meta = icon.getItemMeta();
+        String label = SECTION_NAMES[index];
+        meta.setDisplayName(active ? "§f§l" + TAB_PREFIX + label : "§8" + TAB_PREFIX + "§7" + label);
+        List<String> lore = new ArrayList<>();
+        lore.add(active ? "§a§l▸ Current section" : "§7Click to jump to §f" + label);
+        meta.setLore(lore);
+        if (active) meta.addEnchant(Enchantment.UNBREAKING, 1, true); // glint = selected
+        icon.setItemMeta(meta);
+        return icon;
     }
 
     private ItemStack named(ItemStack item, String name) {
@@ -124,16 +151,15 @@ public final class CivGui implements Listener {
         19, 20, 21, 22, 23, 24, 25,
         28, 29, 30, 31, 32, 33, 34,
     };
+    private static final int[] TAB_SLOTS = { 2, 4, 6 };
 
-    private List<Inventory> buildPages() {
-        List<Entry> all = entries();
-        int perPage = ITEM_SLOTS.length;
-        int pageCount = (all.size() + perPage - 1) / perPage;
+    /** Builds one 54-slot page per section, tabs and all. */
+    private Inventory[] buildAll() {
+        List<List<Entry>> sections = List.of(saberEntries(), infinityEntries(), fandomEntries());
 
-        List<Inventory> invs = new ArrayList<>();
-        for (int p = 0; p < pageCount; p++) {
-            Inventory inv = Bukkit.createInventory(null, 54,
-                String.format(TITLE, p + 1, pageCount));
+        Inventory[] invs = new Inventory[sections.size()];
+        for (int s = 0; s < sections.size(); s++) {
+            Inventory inv = Bukkit.createInventory(null, 54, String.format(TITLE, SECTION_NAMES[s]));
 
             // Black backdrop everywhere.
             for (int i = 0; i < 54; i++) inv.setItem(i, filler());
@@ -149,13 +175,16 @@ public final class CivGui implements Listener {
                 inv.setItem(r * 9 + 8, border(8, 9));            // right (cyan)
             }
 
-            // Crown up top, spark separating header and grid.
-            inv.setItem(4, crown());
+            // Header: category tabs (glinting on the current section) + crown.
+            for (int t = 0; t < TAB_SLOTS.length; t++) {
+                inv.setItem(TAB_SLOTS[t], tab(t, t == s));
+            }
+            inv.setItem(8, crown());
 
-            // Items for this page.
-            int start = p * perPage;
-            for (int i = 0; i < perPage && start + i < all.size(); i++) {
-                Entry e = all.get(start + i);
+            // Items for this section.
+            List<Entry> entries = sections.get(s);
+            for (int i = 0; i < ITEM_SLOTS.length && i < entries.size(); i++) {
+                Entry e = entries.get(i);
                 ItemStack item = e.item().clone();
                 ItemMeta meta = item.getItemMeta();
                 List<String> lore = meta.hasLore() && meta.getLore() != null
@@ -168,14 +197,12 @@ public final class CivGui implements Listener {
                 inv.setItem(ITEM_SLOTS[i], item);
             }
 
-            // Nav row (inside the gradient frame).
-            if (p > 0) inv.setItem(48, named(new ItemStack(Material.ARROW), "§e« Previous"));
-            if (p < pageCount - 1) inv.setItem(50, named(new ItemStack(Material.ARROW), "Next §e»"));
-            inv.setItem(49, spark());
+            // Nav row.
             inv.setItem(45, named(new ItemStack(Material.CHEST), "§6★ §eGive one of everything"));
+            inv.setItem(49, spark());
             inv.setItem(53, named(new ItemStack(Material.BARRIER), "§c✕ §7Close"));
 
-            invs.add(inv);
+            invs[s] = inv;
         }
         return invs;
     }
@@ -196,24 +223,19 @@ public final class CivGui implements Listener {
         ItemStack clicked = event.getCurrentItem();
         if (clicked == null || !clicked.hasItemMeta()) return;
         String name = ChatColor.stripColor(clicked.getItemMeta().getDisplayName());
-        List<Inventory> invs = pages.get(player.getUniqueId());
-        if (invs == null || invs.isEmpty()) return; // stale view after reload
-        int p = page.getOrDefault(player.getUniqueId(), 0);
-        int pageCount = invs.size();
+        Inventory[] invs = pages.get(player.getUniqueId());
+        if (invs == null || invs.length == 0) return; // stale view after reload
 
         switch (name) {
-            case "« Previous" -> {
-                if (p > 0) { page.put(player.getUniqueId(), p - 1); player.openInventory(invs.get(p - 1)); click(player); }
-            }
-            case "Next »" -> {
-                if (p < pageCount - 1) { page.put(player.getUniqueId(), p + 1); player.openInventory(invs.get(p + 1)); click(player); }
-            }
+            case TAB_PREFIX + "Sabers" -> switchTo(player, invs, 0);
+            case TAB_PREFIX + "Infinity" -> switchTo(player, invs, 1);
+            case TAB_PREFIX + "Fandom" -> switchTo(player, invs, 2);
             case "✕ Close" -> player.closeInventory();
             case "★ Give one of everything" -> {
                 giveEverything(player);
                 player.closeInventory();
             }
-            default -> { /* handled below */ }
+            default -> { /* fall through to the item grid below */ }
         }
 
         // Any non-glass click inside the grid = give that item.
@@ -223,6 +245,14 @@ public final class CivGui implements Listener {
             player.sendMessage("§d✦ §7Received §f" + clicked.getItemMeta().getDisplayName() + "§7.");
             click(player);
         }
+    }
+
+    private void switchTo(Player player, Inventory[] invs, int index) {
+        if (index >= invs.length) return;
+        if (section.getOrDefault(player.getUniqueId(), 0) == index) return; // already there
+        section.put(player.getUniqueId(), index);
+        player.openInventory(invs[index]);
+        click(player);
     }
 
     private boolean isGridSlot(int slot) {
