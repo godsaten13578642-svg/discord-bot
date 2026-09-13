@@ -71,4 +71,7 @@ permissions:
     default: op
   civbridge.gui:
     description: Open the ReactSMP items menu via /civgui
+    default: true
+  civbridge.gui.take:
+    description: Take items out of the ReactSMP items menu
     default: op

@@ -247,14 +247,25 @@ public final class CivGui implements Listener {
             case TAB_PREFIX + "Fandom" -> switchTo(player, invs, 2);
             case "✕ Close" -> player.closeInventory();
             case "★ Give one of everything" -> {
+                if (!player.hasPermission("civbridge.gui.take")) {
+                    player.sendMessage("§c✦ §7You can look, but item claiming is for admins.");
+                    player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.6f, 1.0f);
+                    return;
+                }
                 giveEverything(player);
                 player.closeInventory();
             }
             default -> { /* fall through to the item grid below */ }
         }
 
-        // Any non-glass click inside the grid = give that item.
+        // Any non-glass click inside the grid = take that item — but only for
+        // players with the take permission. Everyone else can browse freely.
         if (isGridSlot(event.getSlot()) && clicked.getType() != Material.BLACK_STAINED_GLASS_PANE) {
+            if (!player.hasPermission("civbridge.gui.take")) {
+                player.sendMessage("§c✦ §7You can look, but item claiming is for admins.");
+                player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.6f, 1.0f);
+                return;
+            }
             player.getInventory().addItem(clicked.clone()).forEach((slot, left) ->
                 player.getWorld().dropItemNaturally(player.getLocation(), left));
             player.sendMessage("§d✦ §7Received §f" + clicked.getItemMeta().getDisplayName() + "§7.");
