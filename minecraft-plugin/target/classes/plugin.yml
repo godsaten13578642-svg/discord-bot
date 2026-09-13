@@ -49,6 +49,9 @@ commands:
     description: Open the ReactSMP custom items menu
     usage: /civgui
     permission: civbridge.gui
+  civpack:
+    description: Show the live resource pack URL and SHA-1 (debug)
+    usage: /civpack [reload]
 
 permissions:
   civbridge.admin:
@@ -75,3 +78,6 @@ permissions:
   civbridge.gui.take:
     description: Take items out of the ReactSMP items menu
     default: op
+  civbridge.pack:
+    description: View resource pack diagnostics via /civpack
+    default: true

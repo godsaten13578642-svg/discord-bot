@@ -5,6 +5,7 @@ import com.civbot.bosses.BossListener;
 import com.civbot.bosses.BossManager;
 import com.civbot.commands.BossCommand;
 import com.civbot.commands.CivCommand;
+import com.civbot.commands.CivPackCommand;
 import com.civbot.commands.DiscordCommand;
 import com.civbot.commands.FandomCommand;
 import com.civbot.commands.InfinityCommand;
@@ -116,6 +117,9 @@ public class CivBridgePlugin extends JavaPlugin {
             }
             return true;
         });
+
+        // ── Resource pack diagnostics (/civpack) ───────────────────────────
+        getCommand("civpack").setExecutor(new CivPackCommand(this));
 
         // Resource pack (lightsaber models/textures). By default the plugin
         // hosts the pack ITSELF over a tiny embedded HTTP server on the same

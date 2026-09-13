@@ -8,6 +8,7 @@ com\civbot\gui\CivGui$Entry.class
 com\civbot\infinity\GauntletListener$MindLink.class
 com\civbot\commands\FandomCommand.class
 com\civbot\fandom\FandomFactory.class
+com\civbot\commands\CivPackCommand.class
 com\civbot\commands\InfinityCommand.class
 com\civbot\bosses\BossManager$4.class
 com\civbot\commands\DiscordCommand.class

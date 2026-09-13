@@ -25,12 +25,27 @@ public class ResourcePackListener implements Listener {
     }
 
     public void apply(PlayerJoinEvent event) {
-        event.getPlayer().setResourcePack(url, sha1);
+        applyTo(event.getPlayer());
+    }
+
+    /** Prompts one player to download the pack. */
+    public void applyTo(org.bukkit.entity.Player player) {
+        player.setResourcePack(url, sha1);
     }
 
     /** Resends the pack prompt to everyone (used after config reload). */
     public void applyToOnline() {
-        plugin.getServer().getOnlinePlayers().forEach(p -> p.setResourcePack(url, sha1));
+        plugin.getServer().getOnlinePlayers().forEach(this::applyTo);
+    }
+
+    /** The URL clients are given, for /civpack diagnostics. */
+    public String getUrl() {
+        return url;
+    }
+
+    /** The SHA-1 hex clients verify against, for /civpack diagnostics. */
+    public String getSha1Hex() {
+        return toHex(sha1);
     }
 
     @EventHandler
