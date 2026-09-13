@@ -17,6 +17,12 @@
 //
 // Pure Node (PNG decode all filters + encode), no dependencies.
 // Run: node tools/gen_stone_models.mjs
+// Tuning flags (all optional):
+//   --glow-alpha=0..255    aura shell opacity (default 96)
+//   --glow-boost=1.2       glow color brightness multiplier (default 1)
+//   --facet-boost=1.15     facet highlight brightness multiplier (default 1)
+//   --gem-scale=1.1        scale the whole stone gem about its center (default 1)
+//   --socket-scale=1.2     scale the gauntlet's socket gem + glow (default 1)
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
@@ -27,6 +33,31 @@ const MC = path.join(PLUGIN, 'src', 'main', 'resources', 'civbridge-pack', 'asse
 const STONE_TEX_SRC = path.join(PLUGIN, 'src', 'main', 'resources', 'civbridge-pack', 'assets', 'civbridge', 'textures', 'item', 'infinity');
 
 const STONES = ['space', 'mind', 'reality', 'power', 'time', 'soul'];
+
+// ── Tuning flags ──────────────────────────────────────────────────────────
+const FLAGS = {};
+for (let i = 2; i < process.argv.length; i++) {
+  const m = process.argv[i].match(/^--([a-z-]+)(?:=(.*))?$/);
+  if (m) FLAGS[m[1]] = m[2] !== undefined ? m[2] : true;
+}
+const num = (k, d) => { const v = parseFloat(FLAGS[k]); return Number.isFinite(v) ? v : d; };
+const GLOW_ALPHA = Math.max(0, Math.min(255, num('glow-alpha', 96)));
+const GLOW_BOOST = num('glow-boost', 1);
+const FACET_BOOST = num('facet-boost', 1);
+const GEM_SCALE = num('gem-scale', 1);
+const SOCKET_SCALE = num('socket-scale', 1);
+
+/** Scales element boxes about a center point (defaults to item center). */
+function scaleElements(elements, s, center = [8, 8, 8]) {
+  if (s === 1) return elements;
+  const mk = c => v => Math.round((c + (v - c) * s) * 1000) / 1000;
+  const sx = mk(center[0]), sy = mk(center[1]), sz = mk(center[2]);
+  return elements.map(e => ({
+    ...e,
+    from: [sx(e.from[0]), sy(e.from[1]), sz(e.from[2])],
+    to: [sx(e.to[0]), sy(e.to[1]), sz(e.to[2])],
+  }));
+}
 
 // ── PNG decode (8-bit RGB/RGBA, all filters) ──────────────────────────────
 function decodePNG(buf) {
@@ -139,9 +170,15 @@ for (const id of STONES) {
   const [r, g, b] = stoneColor(id);
   write(path.join('textures', 'block', `civstone_${id}_body.png`), solidPNG([r, g, b]));
   write(path.join('textures', 'block', `civstone_${id}_facet.png`),
-    solidPNG([clamp255(r * 1.3 + 24), clamp255(g * 1.3 + 24), clamp255(b * 1.3 + 24)]));
+    solidPNG([
+      clamp255((r * 1.3 + 24) * FACET_BOOST),
+      clamp255((g * 1.3 + 24) * FACET_BOOST),
+      clamp255((b * 1.3 + 24) * FACET_BOOST)]));
   write(path.join('textures', 'block', `civstone_${id}_glow.png`),
-    solidPNG([clamp255(r * 0.55 + 128), clamp255(g * 0.55 + 128), clamp255(b * 0.55 + 128)], 96));
+    solidPNG([
+      clamp255((r * 0.55 + 128) * GLOW_BOOST),
+      clamp255((g * 0.55 + 128) * GLOW_BOOST),
+      clamp255((b * 0.55 + 128) * GLOW_BOOST)], GLOW_ALPHA));
 
   const t = `minecraft:block/civstone_${id}`;
   const gem = {
@@ -174,7 +211,8 @@ for (const id of STONES) {
                  up: FACE([0, 0, 7.2, 5.2], '#glow'), down: FACE([0, 0, 7.2, 5.2], '#glow') } },
     ],
   };
-  write(path.join('models', 'block', `civstone_${id}.json`), JSON.stringify(gem));
+  write(path.join('models', 'block', `civstone_${id}.json`),
+    JSON.stringify({ ...gem, elements: scaleElements(gem.elements, GEM_SCALE) }));
   console.log(`  + civstone_${id} (color ${r},${g},${b})`);
 }
 
@@ -217,14 +255,17 @@ function gauntletModel(gemId) {
   ];
   if (gemId) {
     // Socket gem bursting from the back of the hand, in the stone's color.
-    elements.push({
-      name: 'socket_gem', from: [6.9, 8.6, 4.9], to: [9.1, 10.8, 5.7],
-      faces: FACE4(2.2, 2.2, gemTex),
-    });
-    elements.push({
-      name: 'socket_glow', from: [6.4, 8.1, 4.5], to: [9.6, 11.3, 4.95],
-      faces: FACE4(3.2, 3.2, '#gem_glow'),
-    });
+    const socketEls = [
+      {
+        name: 'socket_gem', from: [6.9, 8.6, 4.9], to: [9.1, 10.8, 5.7],
+        faces: FACE4(2.2, 2.2, gemTex),
+      },
+      {
+        name: 'socket_glow', from: [6.4, 8.1, 4.5], to: [9.6, 11.3, 4.95],
+        faces: FACE4(3.2, 3.2, '#gem_glow'),
+      },
+    ];
+    elements.push(...scaleElements(socketEls, SOCKET_SCALE));
     textures.gem_glow = `minecraft:block/civstone_${gemId}_glow`;
   }
   return { parent: 'minecraft:item/generated', textures, elements };
