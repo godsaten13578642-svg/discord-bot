@@ -1,0 +1,44 @@
+{
+ "parent": "minecraft:item/handheld",
+ "textures": {
+  "layer0": "minecraft:item/blaze_rod"
+ },
+ "overrides": [
+  {
+   "predicate": {
+    "custom_model_data": 4201
+   },
+   "model": "reactsmp:item/saber_blue"
+  },
+  {
+   "predicate": {
+    "custom_model_data": 4202
+   },
+   "model": "reactsmp:item/saber_green"
+  },
+  {
+   "predicate": {
+    "custom_model_data": 4203
+   },
+   "model": "reactsmp:item/saber_violet"
+  },
+  {
+   "predicate": {
+    "custom_model_data": 4204
+   },
+   "model": "reactsmp:item/saber_yellow"
+  },
+  {
+   "predicate": {
+    "custom_model_data": 4205
+   },
+   "model": "reactsmp:item/saber_white"
+  },
+  {
+   "predicate": {
+    "custom_model_data": 4206
+   },
+   "model": "reactsmp:item/saber_red"
+  }
+ ]
+}

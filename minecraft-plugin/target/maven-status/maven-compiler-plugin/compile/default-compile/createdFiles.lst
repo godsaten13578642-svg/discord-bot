@@ -20,6 +20,7 @@ com\civbot\skript\SkriptScriptManager$ScriptIssue.class
 com\civbot\listeners\PlayerListener.class
 com\civbot\bosses\BossManager$2.class
 com\civbot\lightsaber\SaberListener.class
+com\civbot\lightsaber\SaberListener$1.class
 com\civbot\fandom\FandomListener$3.class
 com\civbot\CivBridgePlugin.class
 com\civbot\bosses\BossType.class

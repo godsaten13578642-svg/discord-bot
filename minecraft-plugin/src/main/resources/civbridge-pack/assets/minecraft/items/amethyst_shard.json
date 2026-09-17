@@ -1,0 +1,55 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:custom_model_data",
+    "index": 0,
+    "cases": [
+      {
+        "when": "reactsmp:kyber_blue",
+        "model": {
+          "type": "minecraft:model",
+          "model": "reactsmp:item/kyber_blue"
+        }
+      },
+      {
+        "when": "reactsmp:kyber_green",
+        "model": {
+          "type": "minecraft:model",
+          "model": "reactsmp:item/kyber_green"
+        }
+      },
+      {
+        "when": "reactsmp:kyber_violet",
+        "model": {
+          "type": "minecraft:model",
+          "model": "reactsmp:item/kyber_violet"
+        }
+      },
+      {
+        "when": "reactsmp:kyber_yellow",
+        "model": {
+          "type": "minecraft:model",
+          "model": "reactsmp:item/kyber_yellow"
+        }
+      },
+      {
+        "when": "reactsmp:kyber_white",
+        "model": {
+          "type": "minecraft:model",
+          "model": "reactsmp:item/kyber_white"
+        }
+      },
+      {
+        "when": "reactsmp:kyber_red",
+        "model": {
+          "type": "minecraft:model",
+          "model": "reactsmp:item/kyber_red"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "minecraft:item/amethyst_shard"
+    }
+  }
+}

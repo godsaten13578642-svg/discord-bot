@@ -43,8 +43,23 @@ const REQUIRED_IDS = [
   'civbridge:fandom_chidori_blade', 'civbridge:fandom_angel_blade',
   'civbridge:fandom_first_blade', 'civbridge:fandom_deaths_scythe',
   'civbridge:fandom_the_colt',
+  // Orbs (slime-ball based): the tome, the corrupted unknown orb, and every
+  // React Orb rarity tier ("orb_react" is the legacy alias for common).
+  'civbridge:orb_story', 'civbridge:orb_unknown', 'civbridge:orb_react',
+  'civbridge:orb_react_common', 'civbridge:orb_react_uncommon', 'civbridge:orb_react_rare',
+  'civbridge:orb_react_epic', 'civbridge:orb_react_legendary', 'civbridge:orb_react_heroic',
+  'civbridge:orb_react_mythic', 'civbridge:orb_react_demigod', 'civbridge:orb_react_semiop',
+  'civbridge:orb_react_god', 'civbridge:orb_react_transcend',
   // GUI marks
   'reactsmp:crown', 'reactsmp:spark',
+  // ReactSMP lightsaber set (tools/gen_reactsmp_items.mjs): the hilt on a
+  // stick, the six ignited blades on a blaze rod, the six kyber crystals on an
+  // amethyst shard.
+  'reactsmp:saber_hilt',
+  'reactsmp:saber_blue', 'reactsmp:saber_green', 'reactsmp:saber_violet',
+  'reactsmp:saber_yellow', 'reactsmp:saber_white', 'reactsmp:saber_red',
+  'reactsmp:kyber_blue', 'reactsmp:kyber_green', 'reactsmp:kyber_violet',
+  'reactsmp:kyber_yellow', 'reactsmp:kyber_white', 'reactsmp:kyber_red',
 ];
 
 // ── Minimal zip reader (store + deflate) ────────────────────────────────────
@@ -97,7 +112,7 @@ const VANILLA_PARENT_MODELS = new Set(['minecraft:block/block', 'minecraft:item/
 const VANILLA_PARENT_MODELS_NO_NS = new Set(['block/block', 'item/generated', 'item/handheld']);
 // Common vanilla texture namespaces the client provides (heuristic: anything
 // under minecraft: that is not shipped in THIS pack is treated as vanilla).
-const VANILLA_PREFIXES_WE_SHIP = ['block/light_sabor', 'block/civblade', 'item/reactsmp'];
+const VANILLA_PREFIXES_WE_SHIP = ['block/light_sabor', 'block/civblade', 'block/civorb', 'item/reactsmp'];
 
 function isCustomTexture(ref) {
   const { ns, path: p } = splitRef(ref);

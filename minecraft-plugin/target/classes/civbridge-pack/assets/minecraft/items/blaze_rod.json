@@ -1,0 +1,55 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:custom_model_data",
+    "index": 0,
+    "cases": [
+      {
+        "when": "reactsmp:saber_blue",
+        "model": {
+          "type": "minecraft:model",
+          "model": "reactsmp:item/saber_blue"
+        }
+      },
+      {
+        "when": "reactsmp:saber_green",
+        "model": {
+          "type": "minecraft:model",
+          "model": "reactsmp:item/saber_green"
+        }
+      },
+      {
+        "when": "reactsmp:saber_violet",
+        "model": {
+          "type": "minecraft:model",
+          "model": "reactsmp:item/saber_violet"
+        }
+      },
+      {
+        "when": "reactsmp:saber_yellow",
+        "model": {
+          "type": "minecraft:model",
+          "model": "reactsmp:item/saber_yellow"
+        }
+      },
+      {
+        "when": "reactsmp:saber_white",
+        "model": {
+          "type": "minecraft:model",
+          "model": "reactsmp:item/saber_white"
+        }
+      },
+      {
+        "when": "reactsmp:saber_red",
+        "model": {
+          "type": "minecraft:model",
+          "model": "reactsmp:item/saber_red"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "minecraft:item/blaze_rod"
+    }
+  }
+}

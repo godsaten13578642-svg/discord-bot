@@ -1,0 +1,44 @@
+{
+ "parent": "minecraft:item/generated",
+ "textures": {
+  "layer0": "minecraft:item/amethyst_shard"
+ },
+ "overrides": [
+  {
+   "predicate": {
+    "custom_model_data": 4301
+   },
+   "model": "reactsmp:item/kyber_blue"
+  },
+  {
+   "predicate": {
+    "custom_model_data": 4302
+   },
+   "model": "reactsmp:item/kyber_green"
+  },
+  {
+   "predicate": {
+    "custom_model_data": 4303
+   },
+   "model": "reactsmp:item/kyber_violet"
+  },
+  {
+   "predicate": {
+    "custom_model_data": 4304
+   },
+   "model": "reactsmp:item/kyber_yellow"
+  },
+  {
+   "predicate": {
+    "custom_model_data": 4305
+   },
+   "model": "reactsmp:item/kyber_white"
+  },
+  {
+   "predicate": {
+    "custom_model_data": 4306
+   },
+   "model": "reactsmp:item/kyber_red"
+  }
+ ]
+}

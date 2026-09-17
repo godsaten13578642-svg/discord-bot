@@ -235,6 +235,42 @@ The pack works two ways (it includes both systems):
   `civbridge:fandom_the_colt` …) via `assets/minecraft/items/*.json`
 - **1.21.3 and older**: integer `CustomModelData` 1001–3203 via legacy override models
 
+**ReactSMP lightsaber set** — the Skript side (the `React smp skripts` repo,
+`Story/starwars.sk`) draws its hilt, blades and kyber crystals from this pack:
+`reactsmp:saber_hilt`, `reactsmp:saber_<blue|green|violet|yellow|white|red>` and
+`reactsmp:kyber_<colour>`. Generate them with:
+
+```bash
+node tools/gen_reactsmp_items.mjs                  # sprites + models + selectors
+node tools/gen_reactsmp_items.mjs --preview        # + ASCII charts and an
+                                                   #   isometric view of each saber
+node tools/gen_reactsmp_items.mjs --html out.html  # one-file contact sheet (no JS)
+node tools/build_resource_pack.mjs civbridge-pack  # rebuild + validate the zip
+node tools/stage_artifacts.mjs                    # so /downloads/pack serves it
+```
+
+The six sabers are **3D models** — a hilt built from 14 boxes (pommel, ring,
+neck, ribbed grip, activation box with its stud, vented shroud, emitter lip) plus
+one blade box — with the same frame and display transforms as the pack's existing
+sabers, so they sit in the hand identically. The blade's glow is painted by its
+texture, a horizontal gradient (white-hot core → lit tone → deep tone) that each
+face of the box shows across its width; the hilt uses a rolled-out *chart* where
+x wraps around the barrel and y runs along it, which is what lets a stack of
+separate boxes read as one machined tube. The six kyber crystals stay flat 32×32
+sprites.
+
+Models are **self-checked before the script finishes**: every face has to point at
+a texture the model defines and stay inside the chart. That gap is worth having
+covered — the pack's own `anakin_*` sabers all reference a `#3` their textures
+block never defines, on every hilt box, so their hilts do not render as intended.
+
+Ids the generator owns are listed in `REQUIRED_IDS` in
+`tools/check_pack_chains.mjs`, so a rename that breaks the Skript side fails
+validation instead of shipping. Everything it writes lands under
+`assets/reactsmp/`, plus the selector for each of the three base items — **stick**
+(hilt), **blaze rod** (blades) and **amethyst shard** (crystals) — merged into
+that base's existing cases, leaving every case it does not own alone.
+
 ### Turning it on (server config)
 
 **Default — zero config.** The plugin serves the pack itself over a tiny
@@ -457,7 +493,9 @@ If a custom item shows as a plain vanilla item, work down this list in order.
 
 **4. Verify WHICH pack your client holds**
 - `Options → Resource Packs → CivBridge → ` the pack version in its tooltip
-- The current build is `pack_format: 64`, SHA-1 `5897761635cc3f5190a03c939678d1f0229bea19`
+- The current build is `pack_format: 64`; its SHA-1 is printed by
+  `node tools/build_resource_pack.mjs civbridge-pack` (the zip changes every rebuild,
+  so take the number from that output rather than from this file)
 - Old cached copy (format 46 or a different SHA-1)? Remove it, `/civpack reload`, accept the prompt
 
 **5. Verify the server runs the current jar**
@@ -482,7 +520,7 @@ If a custom item shows as a plain vanilla item, work down this list in order.
   (cache or declined prompt), not the server
 
 Every build is validated automatically (selectors → models → textures for
-all 36 CMD ids), so a structurally broken pack can no longer ship — if
+every CMD id in the contract), so a structurally broken pack can no longer ship — if
 everything above checks out and an item is still vanilla-looking, report
 which item and which command produced it.
 
