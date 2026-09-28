@@ -104,12 +104,32 @@ const Events = new Proxy({}, { get: (_, k) => String(k) });
 
 const users = new Map();        // id -> user (also client.users.cache)
 const channels = new Map();
+
+// What Discord reports. guild-900 is a server the bot was already in before
+// this boot (no event fires for it), guild-901 only reaches the gateway as a
+// nameless partial — both are what server auto-detection has to cope with.
+const guildsCache = new Map([
+  ['guild-900', { id: 'guild-900', name: 'Auto Detected', commands: { set: () => Promise.resolve() } }],
+  ['guild-901', { id: 'guild-901', unavailable: true }],
+]);
+const fullGuilds = new Map([
+  ['guild-777', { id: 'guild-777', name: 'Late Joiners' }],
+  ['guild-900', { id: 'guild-900', name: 'Auto Detected' }],
+  ['guild-901', { id: 'guild-901', name: 'Fetched Later' }],
+]);
 class FakeClient {
   constructor() {
     this.handlers = {};
     this.user = { id: 'bot', username: 'MemeBot', setPresence() {} };
     this.users = { cache: users, fetch: async (id) => users.get(id) || Promise.reject(new Error('unknown user')) };
-    this.guilds = { cache: new Map(), fetch: async (id) => ({ id, roles: { create: async () => ({ id: 'role' }) }, channels: { cache: channels } }) };
+    // With an id: that one guild (role ops). Without: the full list, like
+    // discord.js' fetch() — this is what server auto-detection reads.
+    this.guilds = {
+      cache: guildsCache,
+      fetch: async (id) => (id
+        ? { id, roles: { create: async () => ({ id: 'role' }) }, channels: { cache: channels } }
+        : fullGuilds),
+    };
     this.channels = { cache: channels };
   }
   on(event, fn) { (this.handlers[event] ||= []).push(fn); return this; }
@@ -541,6 +561,82 @@ async function main() {
   await fireInteraction(mkInteraction({ name: 'help' }));
   assert(has(sent.owner, 'Available Commands') && has(sent.owner, '`/reactapp`') && has(sent.owner, '`!` prefix'),
     'the help text lists the slash commands and the kept prefix');
+
+  // ── 14. Every server is detected automatically ────────────────────────────
+  // Wipe the list: guild-900 was never announced by an event, guild-901 is only
+  // a nameless partial in the gateway cache — both still have to turn up.
+  for (const s of (await callApi('get /api/servers', { user: MASTER })).body) {
+    await callApi(`delete /api/servers/${s.serverId}`, { user: MASTER });
+  }
+  const healed = await callApi('get /api/servers', { user: MASTER });
+  const healedIds = healed.body.map(s => s.serverId);
+  assert(healedIds.length === 3 && ['guild-777', 'guild-900', 'guild-901'].every(id => healedIds.includes(id)),
+    'an empty server list re-detects every guild on its own');
+  assert(healed.body.find(s => s.serverId === 'guild-900')?.serverName === 'Auto Detected',
+    'a guild the bot was already in is detected without any event');
+  assert(healed.body.find(s => s.serverId === 'guild-901')?.serverName === 'Fetched Later',
+    'a partial guild gets its real name from the REST fetch');
+
+  await callApi('post /api/servers/add', { user: MASTER, body: { serverId: 'guild-999', serverName: 'Never Joined' } });
+  const syncRes = await callApi('post /api/servers/sync', { user: MASTER });
+  assert(syncRes.body.success === true && syncRes.body.total === 3, 'the sync endpoint reports every guild Discord knows');
+  assert(syncRes.body.gone === 1, 'a server the bot is not in is flagged by the sync');
+  const resynced = await callApi('post /api/servers/sync', { user: MASTER });
+  assert(resynced.body.added === 0 && resynced.body.total === 3, 'a second sync is a no-op when nothing changed');
+  const flagged = (await callApi('get /api/servers', { user: MASTER })).body;
+  assert(!!flagged.find(s => s.serverId === 'guild-999')?.goneAt, 'a server the bot is not in stays on record, flagged');
+  assert(flagged.find(s => s.serverId === 'guild-900')?.goneAt === undefined, 'servers the bot is still in are not flagged');
+
+  // ── 15. The background timer re-syncs without a dashboard visit ──────────
+  assert(typeof global.__guildSyncTick === 'function', 'the background sync tick is wired up');
+  await callApi('delete /api/servers/guild-900', { user: MASTER });
+  const afterDelete = (await callApi('get /api/servers', { user: MASTER })).body.map(s => s.serverId);
+  assert(!afterDelete.includes('guild-900'), 'a stored server can be removed');
+  const ticked = await global.__guildSyncTick({ force: true });
+  assert(ticked.synced === true && ticked.total === 3, 'one tick asks Discord for the guild list');
+  const afterTick = (await callApi('get /api/servers', { user: MASTER })).body.map(s => s.serverId);
+  assert(afterTick.includes('guild-900'), 'the tick restores a server nobody asked about');
+  const quiet = await global.__guildSyncTick();
+  assert(quiet.synced === false && quiet.reason === 'throttled', 'ticks are throttled so the timer stays cheap');
+
+  // ── 16. A removal is a warning, not a quiet footnote ────────────────────
+  // Sync-discovered removal: a server nobody announced, picked up by a scan.
+  sent.owner.length = 0;
+  await callApi('post /api/servers/add', { user: MASTER, body: { serverId: 'guild-404', serverName: 'Ghost Town' } });
+  await global.__guildSyncTick({ force: true });
+  assert(has(sent.owner, 'removed from') && has(sent.owner, 'Ghost Town'),
+    'a server flagged by a background scan warns the owners, not just the live event');
+
+  const deleteHandlers = global.botClient.handlers[Events.GuildDelete] || [];
+  assert(deleteHandlers.length === 1, 'the bot listens for guild removals');
+
+  // Live event path: the kick must flag the server *and* DM the owners.
+  sent.owner.length = 0;
+  await deleteHandlers[0]({ id: 'guild-777', name: 'Late Joiners' });
+  assert(has(sent.owner, 'removed from') && has(sent.owner, 'Late Joiners'), 'a live removal DMs the owners by name');
+  assert(has(sent.owner, 'Re-invite'), 'the DM says how to put the bot back');
+  const kicked = (await callApi('get /api/servers', { user: MASTER })).body.find(s => s.serverId === 'guild-777');
+  assert(!!kicked?.goneAt, 'the removed server is flagged in the dashboard list');
+
+  // One warning per removal — a repeat event must not re-DM an already-flagged server.
+  sent.owner.length = 0;
+  await deleteHandlers[0]({ id: 'guild-777', name: 'Late Joiners' });
+  assert(sent.owner.length === 0, 'the owners are warned once, not on every event');
+
+  // Re-invited: the flag clears and the owners get the good news.
+  sent.owner.length = 0;
+  await global.__guildSyncTick({ force: true });
+  assert(has(sent.owner, "I'm back in") && has(sent.owner, 'Late Joiners'), 'a re-invite DMs the owners that the bot is back');
+  const back = (await callApi('get /api/servers', { user: MASTER })).body.find(s => s.serverId === 'guild-777');
+  assert(back?.goneAt === undefined, 'the dashboard flag clears once the bot is back');
+
+  // The "is detection still alive?" badge the Servers tab reads.
+  const syncStatus = await callApi('get /api/servers/sync-status', { user: MASTER });
+  assert(!!syncStatus.body.at && syncStatus.body.intervalMinutes > 0 && syncStatus.body.online === true,
+    'the dashboard can ask when detection last ran');
+  await wait(1700);
+  const syncPersisted = JSON.parse(fs.readFileSync(path.join(tmp, 'db.json'), 'utf8'));
+  assert(!!syncPersisted.lastServerSync?.at, 'the last-sync stamp survives a restart');
 
   if (failures) { console.error(`\n❌ ${failures} react-command check(s) failed`); process.exitCode = 1; }
   else console.log('\n✅ all react-command checks passed');

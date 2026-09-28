@@ -42,6 +42,7 @@ const data = {
   reactApplications: _saved.reactApplications || {},  // 'RA-1' -> React application (see react-applications.js)
   ownerTodos:        _saved.ownerTodos        || {},  // 'T-1'  -> { id, type, appId, text, status, doneBy, doneAt }
   mcServer:       { players: [], online: false, lastSeen: null, chatLog: [], eventLog: [], commandLog: [], ...(_saved.mcServer || {}) },
+  lastServerSync: _saved.lastServerSync || null,  // { at, total, added, gone } — the last successful Discord guild pass
 };
 
 // Counters own the growing ids (RA-3, T-7, …) — new ones get defaults here so
@@ -172,6 +173,7 @@ const stateStore = require('./state-db').createGameStateStore({
     data.ownerTodos     = safe(saved.ownerTodos, data.ownerTodos);
     data.mcServer       = { players: [], online: false, lastSeen: null, chatLog: [], eventLog: [], commandLog: [], ...(saved.mcServer || {}) };
     data.serverFeatures = safe(saved.serverFeatures, data.serverFeatures);
+    data.lastServerSync = safe(saved.lastServerSync, data.lastServerSync);
     if (Array.isArray(saved.counters)) {
       saved.counters.forEach((v, i) => { counters[i] = v; });
     } else if (saved.counters && typeof saved.counters === 'object') {
@@ -822,12 +824,40 @@ app.delete('/api/announcements/:id', (req, res) => {
 });
 
 // ── Servers ────────────────────────────────────────────────────────────────────
-app.get('/api/servers', authMiddleware, (req, res) => {
+const visibleServers = (req) => {
   const visibleServerIds = new Set(serverIdsForUser(req));
-  const servers = Object.values(data.servers).filter(server =>
-    req.user.role === 'master' || visibleServerIds.has(server.serverId)
-  );
+  return Object.values(data.servers)
+    .filter(server => req.user.role === 'master' || visibleServerIds.has(server.serverId))
+    .sort((a, b) => String(a.serverName || '').localeCompare(String(b.serverName || '')));
+};
+
+app.get('/api/servers', authMiddleware, async (req, res) => {
+  let servers = visibleServers(req);
+  // Self-heal an empty list: the bot knows about servers the store may not have
+  // recorded yet (first boot on a fresh database, or a missed gateway event).
+  if (!servers.length && global.botClient?.isReady()) {
+    const synced = await syncGuilds();
+    if (synced.synced) servers = visibleServers(req);
+  }
   res.json(servers);
+});
+
+// "Is the background detection alive, and when did it last run?" — the dashboard
+// badge reads this. Readable by any signed-in user so the Servers tab is honest
+// for owners too; the numbers themselves are not sensitive.
+app.get('/api/servers/sync-status', authMiddleware, (req, res) => {
+  res.json({
+    ...(data.lastServerSync || { at: null, total: 0, added: 0, gone: 0 }),
+    intervalMinutes: GUILD_SYNC_MINUTES,
+    online: !!global.botClient?.isReady(),
+  });
+});
+
+// Fired by the dashboard's "Sync from Discord" button.
+app.post('/api/servers/sync', authMiddleware, requireRole('master'), async (req, res) => {
+  const result = await syncGuilds({ force: true });
+  if (!result.synced) return res.status(503).json({ error: `Could not sync: ${result.reason}` });
+  res.json({ success: true, ...result, servers: Object.keys(data.servers).length });
 });
 
 // Manual server add from dashboard
@@ -1461,12 +1491,115 @@ function registerGuild(guild) {
   return true;
 }
 
+/**
+ * Flags a stored server as no longer reachable and warns the owners about it —
+ * once, no matter how the removal was noticed (live event or a later sync).
+ * The record itself is kept, so the server's settings survive a kick, and a
+ * re-invite clears the flag on the next sync.
+ */
+async function markServerGone(serverId, fallbackName = '') {
+  const server = data.servers[serverId];
+  if (!server || server.goneAt) return null;
+  server.goneAt = new Date().toISOString();
+  saveDb();
+  const label = server.serverName || fallbackName || serverId;
+  console.log(`🖥️  No longer in ${label} — flagged as unreachable in the dashboard`);
+  await dmOwners([
+    `⚠️ **I was removed from ${label}** (\`${serverId}\`)`,
+    'Its settings are safe — it stays on the dashboard list, flagged as unreachable.',
+    'Re-invite the bot and it will be picked back up automatically, or remove the entry from the Servers tab.',
+  ].join('\n'));
+  return server;
+}
+
+// When the bot came back to a server it had been removed from, the owners get
+// the good news too — the dashboard entry is active again either way.
+async function markServerBack(server) {
+  const label = server.serverName || server.serverId;
+  delete server.goneAt;
+  saveDb();
+  console.log(`🖥️  Back in ${label} — cleared its unreachable flag`);
+  await dmOwners(`✅ **I'm back in ${label}** — its dashboard entry is active again.`);
+}
+
+let lastGuildSync = 0;
+/**
+ * Reconciles the dashboard's server list with Discord: every server the bot is
+ * in gets registered, so nobody has to add server ids by hand.
+ *
+ * The gateway cache is used first; when it is empty or holds unavailable
+ * partials (what the READY payload can look like) the full list is fetched over
+ * REST. Servers the bot is no longer in are marked `goneAt` rather than deleted,
+ * so their feature settings survive a kick.
+ */
+async function syncGuilds({ force = false } = {}) {
+  const c = global.botClient;
+  if (!c?.isReady()) return { synced: false, reason: 'the bot is offline' };
+  // The dashboard polls every 8s — never ask Discord harder than this.
+  if (!force && Date.now() - lastGuildSync < 60_000) return { synced: false, reason: 'throttled' };
+  lastGuildSync = Date.now();
+
+  let guilds = [...c.guilds.cache.values()];
+  if (!guilds.length || guilds.some(g => !g.name)) {
+    try {
+      guilds = [...(await c.guilds.fetch()).values()];
+    } catch (e) {
+      console.error(`⚠️  Could not fetch the guild list from Discord: ${e.message}`);
+      if (!guilds.length) return { synced: false, reason: 'Discord did not return a guild list' };
+    }
+  }
+
+  let added = 0;
+  for (const g of guilds) if (registerGuild(g)) added++;
+
+  const seen = new Set(guilds.map(g => g.id));
+  let gone = 0;
+  for (const server of Object.values(data.servers)) {
+    if (seen.has(server.serverId)) {
+      // Re-invited since it was flagged — say so, then clear it.
+      if (server.goneAt) await markServerBack(server);
+      continue;
+    }
+    if (await markServerGone(server.serverId)) gone++;
+  }
+
+  // Remember the pass so the dashboard can show that detection is alive.
+  data.lastServerSync = { at: new Date().toISOString(), total: guilds.length, added, gone };
+  saveDb();
+  return { synced: true, total: guilds.length, added, gone };
+}
+
+/**
+ * One background pass. Throttled exactly like the on-demand sync, and quiet
+ * unless something actually changed — this runs on a timer forever.
+ */
+async function guildSyncTick(options = {}) {
+  const result = await syncGuilds(options);
+  if (result.synced && (result.added || result.gone)) {
+    console.log(`🖥️  Server sync: ${result.total} known, ${result.added} updated, ${result.gone} unreachable`);
+  }
+  return result;
+}
+// Exposed so a test (or a manual poke) can run one tick without waiting for it.
+global.__guildSyncTick = guildSyncTick;
+
+// Discord membership changes are rare, so a slow timer is plenty: servers the
+// bot joins or leaves are picked up even when nobody opens the dashboard. The
+// tick no-ops while the bot is offline. GUILD_SYNC_MINUTES=0 disables it.
+const GUILD_SYNC_MINUTES = Number(process.env.GUILD_SYNC_MINUTES ?? 5);
+if (GUILD_SYNC_MINUTES > 0) {
+  setInterval(() => { guildSyncTick().catch(e => console.error(`⚠️  Server sync failed: ${e.message}`)); },
+    GUILD_SYNC_MINUTES * 60_000).unref?.();
+}
+
 client.once(Events.ClientReady, (c) => {
   console.log(`✅ Discord bot logged in as ${c.user.tag}`);
   global.__botActive = true;
   // Spin-down/wake-up notices are private DMs — see sendStatusNotice().
-  const registered = c.guilds.cache.reduce((n, g) => n + (registerGuild(g) ? 1 : 0), 0);
-  if (registered) console.log(`🖥️  Registered ${registered} Discord server(s) with the dashboard`);
+  // Every server the bot is in gets picked up here (see syncGuilds).
+  syncGuilds({ force: true })
+    .then(r => { if (r.synced) console.log(`🖥️  Synced ${r.total} Discord server(s) with the dashboard`); })
+    .catch(e => console.error(`⚠️  Server sync failed: ${e.message}`));
   // Reschedule any active giveaways that survived a restart
   Object.values(data.giveaways).forEach(g => { if (!g.ended) scheduleGiveaway(g); });
   // Reschedule any pending announcements
@@ -1541,6 +1674,12 @@ client.on(Events.GuildCreate, (g) => {
   // Instant slash commands here — the global ones can take up to an hour.
   g.commands.set(ALL_SLASH_COMMANDS).catch(() => {});
 });
+
+// Kicked or left: keep the record (its per-server settings still exist), mark it
+// so the dashboard stops offering a server the bot can no longer see, and warn
+// the owners by DM — a kick should never be a silent footnote in a list.
+client.on(Events.GuildDelete, (g) => markServerGone(g.id, g.name)
+  .catch(e => console.error(`⚠️  Removal notice failed: ${e.message}`)));
 
 // The gateway can drop without the process dying (Render network hiccups);
 // discord.js fires both events on every reconnect cycle.

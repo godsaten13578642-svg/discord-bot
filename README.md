@@ -87,6 +87,22 @@ A comprehensive Discord bot system for managing civilizations, religions, econom
 - Channel archival
 - Reminder system
 
+### 🖥️ Server detection
+- Every Discord server the bot is in shows up in the dashboard **automatically** — no IDs to type
+- Detected on login, when the bot joins a server, lazily whenever the server list is empty while
+  the bot is connected, and on a **background timer** (every 5 minutes by default, set
+  `GUILD_SYNC_MINUTES=0` to disable) so joins and leaves are picked up without opening the dashboard
+- The REST fetch fills in names when Discord only sends partial guilds at login
+- Left/kicked servers stay on record (their settings survive) but are flagged as unreachable
+- A removal is **not silent**: the owners get a DM ("⚠️ I was removed from …") and a warning banner
+  sits at the top of every dashboard tab until the bot is re-invited or the entry is removed — it is
+  sent once per removal, whether the kick arrives live or a later scan notices it
+- Re-inviting the bot clears the flag automatically and DMs the owners that it is back
+- The Servers tab shows a **last-checked badge** ("🟢 Auto-checking every 5 min · last checked 2 min
+  ago"), so it is obvious the background detection is alive
+- **🔄 Sync from Discord** on the Servers tab re-checks on demand; manual add is only for a server the
+  bot cannot see yet
+
 ### 💬 Slash commands
 - Every command is a real Discord slash command — type `/` and pick one
   (`/balance`, `/pay`, `/giveaway`, `/reactapp`, `/todo`, …)

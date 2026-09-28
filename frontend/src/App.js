@@ -41,6 +41,62 @@ const S = {
   label:   { fontSize: 12, fontWeight: 700, color: '#666', marginBottom: 4, display: 'block' },
 };
 
+// "just now" / "4 min ago" — used by the last-synced badge and removal notice.
+function timeAgo(iso) {
+  if (!iso) return 'never';
+  const secs = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (secs < 45) return 'just now';
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} d ago`;
+}
+
+// Tells you the background Discord scan is alive without opening a log file.
+function SyncBadge({ status, bot }) {
+  if (bot && !bot.online) {
+    return <Badge color="#f8d7da" textColor="#842029">⏸️ Auto-detect paused — bot offline</Badge>;
+  }
+  if (!status?.at) {
+    return <Badge color="#fff3cd" textColor="#7a4b00">🟡 Auto-detect hasn't run yet</Badge>;
+  }
+  return (
+    <Badge color="#d1e7dd" textColor="#0f5132">
+      🟢 Auto-checking every {status.intervalMinutes} min · last checked {timeAgo(status.at)}
+    </Badge>
+  );
+}
+
+// A removal should be loud, not a footnote in a table: this sits at the top of
+// the dashboard until the bot is re-invited or the entry is removed.
+function RemovedServersNotice({ servers, isMaster, onSync, onRemove, onOpenServers }) {
+  return (
+    <div style={{ background: '#fff3cd', border: '1.5px solid #ffc107', borderLeft: '6px solid #fd7e14', borderRadius: 10, padding: '14px 18px', marginBottom: 20 }}>
+      <div style={{ fontWeight: 800, fontSize: 15, color: '#7a4b00', marginBottom: 6 }}>
+        ⚠️ The bot was removed from {servers.length === 1 ? 'a server' : `${servers.length} servers`}
+      </div>
+      <div style={{ fontSize: 13, color: '#7a4b00', marginBottom: 10 }}>
+        Its commands are off there, but its settings are kept — re-invite the bot and the server is picked back up automatically on the next check.
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {servers.map(s => (
+          <div key={s.serverId} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13 }}>
+            <strong>{s.serverName || 'Unnamed server'}</strong>
+            <code style={{ fontSize: 11, color: '#999' }}>{s.serverId}</code>
+            <span style={{ fontSize: 11, color: '#999' }}>removed {timeAgo(s.goneAt)}</span>
+            {isMaster && <Btn small outline color="#0d6efd" onClick={onSync}>Re-check now</Btn>}
+            {isMaster && <Btn small outline color="#dc3545" onClick={() => onRemove(s)}>Remove entry</Btn>}
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <Btn small outline color="#7a4b00" onClick={onOpenServers}>Open Servers tab</Btn>
+      </div>
+    </div>
+  );
+}
+
 function Btn({ children, onClick, color = '#0d6efd', small, disabled, outline }) {
   return (
     <button onClick={onClick} disabled={disabled} style={{
@@ -187,6 +243,8 @@ export default function App() {
   const [reactSel, setReactSel] = useState(null);
   const [reactNote, setReactNote] = useState('');
   const [reactFilter, setReactFilter] = useState('open');
+  // { at, total, added, gone, intervalMinutes, online } — proves detection is alive.
+  const [syncStatus, setSyncStatus] = useState(null);
 
   // Check saved auth on mount
   useEffect(() => {
@@ -255,12 +313,13 @@ export default function App() {
   const load = useCallback(async () => {
     try {
       const featureUrl = selectedServerId ? `/api/features?serverId=${selectedServerId}` : '/api/features';
-      const [stats, bot, civs, users, servers, features, religions, teams, cults, rebels, alliances, economy, events, bounties] = await Promise.all([
+      const [stats, bot, civs, users, servers, features, religions, teams, cults, rebels, alliances, economy, events, bounties, sync] = await Promise.all([
         api('/api/stats'), api('/api/bot/status'), api('/api/civilizations'), api('/api/users'),
         api('/api/servers'), api(featureUrl), api('/api/religions'), api('/api/teams'),
         api('/api/cults'), api('/api/rebels'), api('/api/alliances'), api('/api/economy'),
-        api('/api/events'), api('/api/bounties'),
+        api('/api/events'), api('/api/bounties'), api('/api/servers/sync-status').catch(() => null),
       ]);
+      if (sync) setSyncStatus(sync);
       setState(s => {
         // Auto-select first server if none selected yet
         if (!selectedServerId && servers && servers.length > 0) {
@@ -292,6 +351,15 @@ export default function App() {
 
   const doDelete  = (msg, fn) => setConfirm({ msg, fn });
   const runConfirm = async () => { await confirm.fn(); setConfirm(null); load(); };
+
+  // Shared by the Servers tab button and the removal notice's "Re-check now".
+  const syncServers = async () => {
+    const r = await post('/api/servers/sync', {});
+    if (r.error) { showToast(r.error, false); return; }
+    showToast(`Synced ${r.total} server(s) from Discord`);
+    load();
+  };
+  const removedServers = (state.servers || []).filter(s => s.goneAt);
 
   const setFeature = async (key, val) => {
     setState(s => ({ ...s, features: { ...s.features, [key]: val } }));
@@ -398,6 +466,17 @@ export default function App() {
 
       {/* Content */}
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 24px' }}>
+
+        {/* Removal alert — loud on every tab until the bot is back or the entry is gone */}
+        {removedServers.length > 0 && (
+          <RemovedServersNotice
+            servers={removedServers}
+            isMaster={userRole === 'master'}
+            onSync={syncServers}
+            onRemove={s => doDelete(`Remove ${s.serverName}?`, () => del(`/api/servers/${s.serverId}`))}
+            onOpenServers={() => setTab('Servers')}
+          />
+        )}
 
         {/* Dashboard */}
         {tab === 'Dashboard' && stats && (
@@ -690,7 +769,11 @@ export default function App() {
             {/* Only the master can register or remove servers. */}
             {userRole === 'master' && (
               <div style={{ ...S.card, marginBottom: 16 }}>
-                <h3 style={{ margin: '0 0 14px' }}>➕ Add Server</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+                  <h3 style={{ margin: 0 }}>➕ Add Server</h3>
+                  {/* Every server the bot is in is detected on its own — this just re-checks now. */}
+                  <Btn small outline color="#0d6efd" onClick={syncServers}>🔄 Sync from Discord</Btn>
+                </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                   <div style={{ flex: 1, minWidth: 160 }}>
                     <div style={S.label}>Server Name</div>
@@ -723,21 +806,27 @@ export default function App() {
                 </div>
                 <div style={{ fontSize: 12, color: '#aaa', marginTop: 10 }}>
                   💡 The Discord Server ID can be found by right-clicking your server name in Discord (enable Developer Mode in settings first).
+                  Servers the bot is already in are detected automatically — the ID is only needed for one it cannot see yet.
                 </div>
               </div>
             )}
 
             {/* Servers list */}
             <div style={S.card}>
-              <h3 style={{ margin: '0 0 14px' }}>🖥️ Discord Servers ({servers.length})</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+                <h3 style={{ margin: 0 }}>🖥️ Discord Servers ({servers.length})</h3>
+                {/* Proof the background detection is alive, and when it last ran. */}
+                <SyncBadge status={syncStatus} bot={bot} />
+              </div>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead><tr>{['Name','Server ID','Added','Actions'].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
                 <tbody>
                   {servers.map(s => (
                     <tr key={s.serverId} style={{ background: s.serverId === selectedServerId ? '#f0f7ff' : 'transparent' }}>
                       <td style={S.td}>
-                        <strong>{s.serverName}</strong>
+                        <strong>{s.serverName || 'Unnamed server'}</strong>
                         {s.serverId === selectedServerId && <Badge color="#0d6efd" textColor="white" style={{ marginLeft: 6 }}>selected</Badge>}
+                        {s.goneAt && <Badge color="#f8d7da" textColor="#842029" style={{ marginLeft: 6 }}>bot is not in this server</Badge>}
                       </td>
                       <td style={S.td}><code style={{ fontSize: 11, color: '#666' }}>{s.serverId}</code></td>
                       <td style={{ ...S.td, fontSize: 12, color: '#999' }}>{new Date(s.setupAt).toLocaleDateString()}</td>
@@ -758,7 +847,7 @@ export default function App() {
                   icon="🖥️"
                   text={bot && !bot.online
                     ? 'No servers listed — the bot is offline, so it cannot see your Discord servers. Start the bot (or add one by ID above) to load them.'
-                    : 'No servers yet — add one above'}
+                    : 'No servers found — hit Sync from Discord above, or add one by ID'}
                 />
               )}
             </div>

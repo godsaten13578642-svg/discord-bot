@@ -1,5 +1,5 @@
 - [Paper 1.21.4 Java 21 build](paper-java21-build.md) — Paper 1.21.4 API jar requires Java 21; Replit ships Java 19; must download JDK 21 to ~/.local/jdk-21 to build plugin.
 - [Persistence pattern](persistence-pattern.md) — Data uses db.json file-backed store; saveDb() debounced 1.5s after mutations + 30s interval; loaded at startup via _saved variable.
-- [Dashboard access model](dashboard-access-model.md) — Master accounts are global; owners are scoped to the servers assigned through server ownership mappings.
+- [Dashboard access model](dashboard-access-model.md) — Master accounts are global; owners are scoped to the servers assigned through server ownership mappings. Servers self-register from Discord, and a removal/return DMs the owners and raises a dashboard banner instead of a quiet flag.
 - [Slash commands (/command + !command)](slash-commands.md) — Every command is a registered slash command and still answers `!`, both through `runCommand()` in server.js. Discord reserves `/` for registered commands, so never treat it as a text prefix.
 - [React Orb requests (/reactapp)](react-applications.md) — Orb-for-item delivery queue: tier-gated DM interview (wanted item + delivery coords or "wait"), owner allow → customer confirm → delivery stages until delivered. Needs the DirectMessages intent.
