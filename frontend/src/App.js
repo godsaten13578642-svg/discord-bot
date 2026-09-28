@@ -9,7 +9,29 @@ const api  = (path, opts) => fetch(path, { headers: { 'Authorization': `Bearer $
 const post = (path, body) => fetch(path, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) }).then(r => r.json());
 const del  = (path) => fetch(path, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getToken()}` } }).then(r => r.json());
 
-const TABS = ['Dashboard','Civilizations','Religions','Teams','Cults','Diplomacy','Economy','Events','Members','Servers','Minecraft','Announcements','Settings','Accounts'];
+const TABS = ['Dashboard','Civilizations','Religions','Teams','Cults','Diplomacy','Economy','Events','React Apps','Members','Servers','Minecraft','Announcements','Settings','Accounts'];
+
+// Which applications a filter button shows. 'open' is what still needs a human.
+const REACT_FILTERS = {
+  open:      { label: 'Awaiting review', statuses: ['submitted', 'needs_dim'] },
+  delivery:  { label: 'In delivery',     statuses: ['approved', 'queued'] },
+  delivered: { label: 'Delivered',       statuses: ['delivered'] },
+  closed:    { label: 'Rejected',        statuses: ['rejected', 'withdrawn'] },
+  all:       { label: 'All',             statuses: null },
+};
+
+// Mirrors DELIVERY_STAGES in react-applications.js — the owner's progress
+// buttons. The key is what the API takes; the label is only what we show.
+const DELIVERY_STAGES = [
+  { key: 'not_started', label: '🕐 Not started' },
+  { key: 'making',      label: '🛠️ Started making' },
+  { key: 'almost',      label: '⏳ Almost done' },
+  { key: 'ready',       label: '📦 Ready for customer' },
+  { key: 'delivered',   label: '✅ Delivered' },
+];
+
+// Requests that are past review and on the delivery board.
+const IN_DELIVERY = ['approved', 'queued', 'delivered'];
 
 const S = {
   card:    { background: 'white', borderRadius: 10, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,.08)', marginBottom: 16 },
@@ -160,6 +182,11 @@ export default function App() {
   const [accounts, setAccounts] = useState([]);
   const [promoteForm, setPromoteForm] = useState({ userId: '', serverId: '' });
   const [addServerForm, setAddServerForm] = useState({ serverId: '', serverName: '' });
+  const [reactApps, setReactApps] = useState([]);
+  const [reactTodos, setReactTodos] = useState([]);
+  const [reactSel, setReactSel] = useState(null);
+  const [reactNote, setReactNote] = useState('');
+  const [reactFilter, setReactFilter] = useState('open');
 
   // Check saved auth on mount
   useEffect(() => {
@@ -214,6 +241,17 @@ export default function App() {
     if (d) setDownloads(d);
   }, []);
 
+  // Players have no access to the review queue — the API refuses them too.
+  const loadReactApps = useCallback(async () => {
+    if (userRole === 'player') return;
+    const [list, todos] = await Promise.all([
+      api('/api/react-applications').catch(() => []),
+      api('/api/owner-todos').catch(() => []),
+    ]);
+    if (Array.isArray(list)) setReactApps(list);
+    if (Array.isArray(todos)) setReactTodos(todos);
+  }, [userRole]);
+
   const load = useCallback(async () => {
     try {
       const featureUrl = selectedServerId ? `/api/features?serverId=${selectedServerId}` : '/api/features';
@@ -237,7 +275,8 @@ export default function App() {
     loadMcStatus();
     loadDownloads();
     loadAccounts();
-  }, [loadAnnouncements, loadMcStatus, loadDownloads, loadAccounts, selectedServerId]);
+    loadReactApps();
+  }, [loadAnnouncements, loadMcStatus, loadDownloads, loadAccounts, loadReactApps, selectedServerId]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -350,7 +389,7 @@ export default function App() {
             </div>
           </div>
           <div style={{ display: 'flex', overflowX: 'auto' }}>
-            {TABS.filter(t => userRole === 'master' || t !== 'Accounts').map(t => (
+            {TABS.filter(t => (t !== 'Accounts' || userRole === 'master') && (t !== 'React Apps' || userRole !== 'player')).map(t => (
               <button key={t} style={tabStyle(t)} onClick={() => setTab(t)}>{t}</button>
             ))}
           </div>
@@ -981,6 +1020,233 @@ export default function App() {
         })()}
 
         {/* Announcements */}
+        {/* React Apps — owners review applications and clear the to-do list */}
+        {tab === 'React Apps' && (() => {
+          const wanted = REACT_FILTERS[reactFilter]?.statuses;
+          const list = reactApps.filter(a => !wanted || wanted.includes(a.status));
+          const selected = reactSel ? (reactApps.find(a => a.id === reactSel.id) || reactSel) : null;
+          const review = async (kind, needsText, doneMsg) => {
+            if (!selected) return;
+            if (needsText && !reactNote.trim()) { showToast('Type a note first', false); return; }
+            const r = await post(`/api/react-applications/${selected.id}/${kind}`, { text: reactNote.trim() });
+            if (r.error) { showToast(r.error, false); return; }
+            showToast(doneMsg);
+            setReactNote('');
+            if (r.application) setReactSel(r.application);
+            loadReactApps();
+          };
+          // The delivery board: Not started → Started making → … → Delivered.
+          const moveStage = async (key, label) => {
+            if (!selected) return;
+            const r = await post(`/api/react-applications/${selected.id}/stage`, { stage: key });
+            if (r.error) { showToast(r.error, false); return; }
+            showToast(`Marked ${label}`);
+            if (r.application) setReactSel(r.application);
+            loadReactApps();
+          };
+          const statusBg = a => a.status === 'delivered' ? '#d1e7dd'
+            : a.status === 'queued' ? '#cfe2ff'
+            : a.status === 'rejected' || a.status === 'withdrawn' ? '#f8d7da'
+            : a.status === 'submitted' || a.status === 'needs_dim' || a.status === 'approved' ? '#fff3cd' : '#e2e3e5';
+          const cell = { padding: '8px 10px', fontSize: 13, borderBottom: '1px solid #f0f0f0', verticalAlign: 'top' };
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: 16, alignItems: 'start' }}>
+              <div>
+                <div style={S.card}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+                    <h3 style={{ margin: 0 }}>🎬 React Applications <span style={{ fontWeight: 400, color: '#bbb', fontSize: 14 }}>({list.length})</span></h3>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {Object.entries(REACT_FILTERS).map(([key, f]) => (
+                        <Btn key={key} small outline={reactFilter !== key} color={reactFilter === key ? '#0d6efd' : '#6c757d'}
+                          onClick={() => setReactFilter(key)}>{f.label}</Btn>
+                      ))}
+                    </div>
+                  </div>
+                  {!list.length && <EmptyState icon="🎬" text={reactFilter === 'open' ? 'Nothing waiting for review'
+                    : reactFilter === 'delivery' ? 'Nothing on the delivery board'
+                    : 'No requests here yet'} />}
+                  {list.length > 0 && (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr>
+                          <th style={S.th}>Id</th><th style={S.th}>Applicant</th><th style={S.th}>Name</th>
+                          <th style={S.th}>Orb</th><th style={S.th}>Wanted</th><th style={S.th}>Progress</th><th style={S.th}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {list.map(a => (
+                          <tr key={a.id} style={{ background: reactSel?.id === a.id ? '#f0f6ff' : 'transparent' }}>
+                            <td style={cell}><code style={{ fontSize: 12 }}>{a.id}</code></td>
+                            <td style={cell}>
+                              {a.username || '—'}
+                              {a.mcUsername ? <div style={{ fontSize: 11, color: '#0d6efd' }}>🎮 {a.mcUsername}</div> : null}
+                              <div style={{ fontSize: 11, color: '#bbb' }}>{a.discordId}</div>
+                            </td>
+                            <td style={cell}>{a.name || '—'}</td>
+                            <td style={cell}>{a.tierLabel || '—'}{a.rank ? <span style={{ color: '#bbb' }}> · #{a.rank}</span> : null}</td>
+                            <td style={cell}>{a.item || '—'}</td>
+                            <td style={cell}>
+                              <Badge color={statusBg(a)}>{a.statusLabel}</Badge>
+                              {a.stageLabel ? <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>{a.stageLabel}</div> : null}
+                              {a.todoOpen ? <div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>on to-do list</div> : null}
+                            </td>
+                            <td style={cell}><Btn small outline onClick={() => { setReactSel(a); setReactNote(''); }}>Open</Btn></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                {selected && (
+                  <div style={S.card}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                      <h3 style={{ margin: 0 }}>{selected.name || 'Untitled'} <span style={{ fontWeight: 400, color: '#bbb', fontSize: 14 }}><code>{selected.id}</code></span></h3>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <Badge color={statusBg(selected)}>{selected.statusLabel}</Badge>
+                        {selected.tierLabel && <Badge color="#e7e0ff">{selected.tierLabel}{selected.rank ? ` #${selected.rank}` : ''}</Badge>}
+                        <Btn small outline color="#6c757d" onClick={() => setReactSel(null)}>Close</Btn>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 12, fontSize: 13, color: '#444' }}>
+                      Applicant: <b>{selected.username}</b> <span style={{ color: '#bbb' }}>({selected.discordId})</span>
+                      {' · '}in game: <b>{selected.mcUsername || '—'}</b>
+                      {selected.submittedAt && <span style={{ color: '#aaa' }}> · submitted {new Date(selected.submittedAt).toLocaleString()}</span>}
+                      {selected.revision ? <span style={{ color: '#aaa' }}> · {selected.revision} revision(s)</span> : null}
+                    </div>
+
+                    <div style={{ marginTop: 10, fontSize: 14 }}>
+                      <b>Orb handed over:</b> {selected.tierLabel ? `${selected.tierLabel} (rank ${selected.rank}/11)` : '—'}
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: 14 }}><b>Item wanted:</b> {selected.item || '—'}</div>
+                    <div style={{ marginTop: 6, fontSize: 14 }}><b>Delivery:</b> {selected.deliveryLabel || '—'}</div>
+
+                    <div style={{ marginTop: 14, padding: '12px 14px', background: '#f8f9fa', borderRadius: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>
+                          🚚 Delivery
+                          {selected.stageLabel ? <span style={{ fontWeight: 400, color: '#666' }}> · {selected.stageLabel}</span> : null}
+                        </div>
+                        {!IN_DELIVERY.includes(selected.status) && (
+                          <span style={{ fontSize: 12, color: '#aaa' }}>Allow the request to open the delivery board</span>
+                        )}
+                      </div>
+                      {IN_DELIVERY.includes(selected.status) && (
+                        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                          {DELIVERY_STAGES.map(s => (
+                            <Btn key={s.key} small outline={selected.stage !== s.key}
+                              color={selected.stage === s.key ? '#0d6efd' : '#6c757d'}
+                              onClick={() => moveStage(s.key, s.label)}>{s.label}</Btn>
+                          ))}
+                        </div>
+                      )}
+                      {selected.status === 'approved' && (
+                        <div style={{ fontSize: 11, color: '#aaa', marginTop: 8 }}>
+                          Waiting on the customer to confirm the order in DMs — you can still record progress here.
+                        </div>
+                      )}
+                      {selected.status === 'delivered' && (
+                        <div style={{ fontSize: 11, color: '#198754', marginTop: 8 }}>
+                          Delivered — this request is off the to-do list.
+                        </div>
+                      )}
+                    </div>
+
+                    {selected.suggestedAbilities?.length > 0 && (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={S.label}>Suggested abilities ({selected.suggestedAbilities.length})</div>
+                        <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13 }}>{selected.suggestedAbilities.map((ab, i) => <li key={i}>{ab}</li>)}</ul>
+                      </div>
+                    )}
+                    {selected.abilities?.length > 0 && (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={S.label}>Abilities ({selected.abilities.length})</div>
+                        <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13 }}>{selected.abilities.map((ab, i) => <li key={i}>{ab}</li>)}</ul>
+                      </div>
+                    )}
+                    {selected.dimNote && (
+                      <div style={{ marginTop: 12, padding: '9px 11px', background: '#fff3cd', borderRadius: 7, fontSize: 13 }}>
+                        🔻 <b>Dim-down requested:</b> {selected.dimNote}
+                      </div>
+                    )}
+                    {selected.comments?.length > 0 && (
+                      <div style={{ marginTop: 14 }}>
+                        <div style={S.label}>Comments ({selected.comments.length})</div>
+                        {selected.comments.map((c, i) => (
+                          <div key={i} style={{ padding: '8px 11px', background: c.kind === 'dim' ? '#fff3cd' : '#f8f9fa', borderRadius: 7, marginBottom: 6, fontSize: 13 }}>
+                            <b>{c.byName}</b>{c.kind === 'dim' ? ' · dim-down' : c.kind === 'reject' ? ' · rejection' : ''}
+                            <span style={{ color: '#bbb', fontSize: 11 }}> · {new Date(c.at).toLocaleString()}</span>
+                            <div style={{ marginTop: 3 }}>{c.text}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{ marginTop: 16, borderTop: '1px solid #f0f0f0', paddingTop: 14 }}>
+                      <label style={S.label}>Review note <span style={{ fontWeight: 400, color: '#bbb' }}>(DM'd to the player)</span></label>
+                      <textarea
+                        value={reactNote} onChange={e => setReactNote(e.target.value)} rows={3}
+                        placeholder="e.g. Love the concept — tone the flight speed down and I'll approve it."
+                        style={{ width: '100%', padding: '8px 11px', border: '1.5px solid #ddd', borderRadius: 7, fontSize: 14, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                      />
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                        <Btn small color="#0d6efd" onClick={() => review('comment', true, 'Comment sent')}>💬 Comment</Btn>
+                        <Btn small color="#f59e0b" onClick={() => review('dim', true, 'Dim-down requested')}>🔻 Ask to dim down</Btn>
+                        <Btn small color="#198754" onClick={() => review('approve', false, 'Allowed — waiting on the customer to confirm')}>👍 Allow request</Btn>
+                        <Btn small color="#dc3545" onClick={() => review('reject', false, 'Rejected')}>❌ Reject</Btn>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#aaa', marginTop: 8 }}>
+                        Allowing a request asks the customer to confirm it in DMs, then the delivery buttons open. The job stays on the to-do list until you mark it delivered; a dim-down reopens the interview, and a rejection takes it off the list.
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={S.card}>
+                <h3 style={{ margin: '0 0 12px' }}>🗒️ Owner to-dos <span style={{ fontWeight: 400, color: '#bbb', fontSize: 14 }}>({reactTodos.length})</span></h3>
+                {!reactTodos.length && <EmptyState icon="🗒️" text="Nothing open" />}
+                {reactTodos.map(t => (
+                  <div key={t.id} style={{ borderBottom: '1px solid #f0f0f0', padding: '10px 0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+                      <div style={{ minWidth: 0 }}>
+                        {/* Bot to-do text is Discord markdown — rebuild it from the
+                            structured application so the dashboard reads cleanly. */}
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>
+                          {t.type === 'react_application' ? '🎬' : '📌'}{' '}
+                          {t.application
+                            ? `${t.application.name || 'Untitled'} · ${t.application.tierLabel || '—'} · ${t.application.item || '—'}${t.application.stageLabel ? ` · ${t.application.stageLabel}` : ''}`
+                            : t.text}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>
+                          <code>{t.id}</code>
+                          {t.application ? ` · ${t.application.username || t.application.discordId}${t.application.mcUsername ? ` · 🎮 ${t.application.mcUsername}` : ''}` : ''}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {t.application && (
+                          <Btn small outline onClick={() => {
+                            const a = reactApps.find(x => x.id === t.application.id);
+                            if (a) { setReactSel(a); setReactFilter('all'); }
+                            else showToast('That application is not in the current list', false);
+                          }}>Open</Btn>
+                        )}
+                        <Btn small outline color="#198754" onClick={async () => {
+                          const r = await post(`/api/owner-todos/${t.id}/done`, {});
+                          if (r.error) { showToast(r.error, false); return; }
+                          showToast('Checked off');
+                          loadReactApps();
+                        }}>Done</Btn>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         {tab === 'Announcements' && (
           <div>
             {/* Compose */}
@@ -1138,6 +1404,13 @@ export default function App() {
             <SettingsGroup title="Giveaways" icon="🎉">
               <Toggle label="Giveaways" description="!giveaway <duration> <prize> — react with 🎉 to enter" checked={features.giveawaysEnabled} onChange={v => toggleFeature('giveawaysEnabled', v)} />
                <ChannelSelect label="Giveaway Channel" description="Where giveaways are posted (defaults to channel the command is used in)" value={features.giveawayChannelId} onChange={v => setFeature('giveawayChannelId', v)} channels={serverChannels} enabled={features.giveawaysEnabled} />
+            </SettingsGroup>
+
+            {/* React Applications */}
+            <SettingsGroup title="React Applications" icon="🎬">
+              <Toggle label="React Applications" description="!Reactapp DMs players an application; finished ones land on the owners' to-do list" checked={features.reactApplicationsEnabled} onChange={v => toggleFeature('reactApplicationsEnabled', v)} />
+               <ChannelSelect label="Applications Channel" description="Optional — mirror every finished application into a channel" value={features.reactAppChannelId} onChange={v => setFeature('reactAppChannelId', v)} channels={serverChannels} enabled={features.reactApplicationsEnabled} />
+              <Input label="Approved Role ID" value={features.reactAppApprovedRoleId || ''} onChange={v => setFeature('reactAppApprovedRoleId', v)} placeholder="Role granted to an applicant on approval (optional)" />
             </SettingsGroup>
 
             <SettingsGroup title="Announcements" icon="📢">

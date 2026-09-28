@@ -36,12 +36,20 @@ const data = {
   giveaways:      _saved.giveaways      || {},  // messageId -> { messageId, channelId, prize, hostId, endsAt, ended, winnerId }
   announcements:  _saved.announcements  || {},  // id -> { id, title, body, channelId, scheduledAt, sentAt, cancelled }
   linkedAccounts: _saved.linkedAccounts || {},
-  reverseLinks:   _saved.reverseLinks   || {},
+  reverseLinks:   _saved.reverseLinks   || {},  // discordId -> mcUUID
+  linkedNames:    _saved.linkedNames    || {},  // discordId -> Minecraft username
   linkCodes:      _saved.linkCodes      || {},
+  reactApplications: _saved.reactApplications || {},  // 'RA-1' -> React application (see react-applications.js)
+  ownerTodos:        _saved.ownerTodos        || {},  // 'T-1'  -> { id, type, appId, text, status, doneBy, doneAt }
   mcServer:       { players: [], online: false, lastSeen: null, chatLog: [], eventLog: [], commandLog: [], ...(_saved.mcServer || {}) },
 };
 
-let counters = _saved.counters || { civ: 1, religion: 1, team: 1, cult: 1, alliance: 1, event: 1, poll: 1 };
+// Counters own the growing ids (RA-3, T-7, …) — new ones get defaults here so
+// an existing db.json/Postgres payload keeps working.
+let counters = Object.assign(
+  { civ: 1, religion: 1, team: 1, cult: 1, alliance: 1, event: 1, poll: 1, reactApp: 1, todo: 1 },
+  _saved.counters || {},
+);
 
 // ── Per-Server Features ────────────────────────────────────────────────────────
 const DEFAULT_FEATURES = {
@@ -78,6 +86,9 @@ const DEFAULT_FEATURES = {
   mcApiKey:                     'change-me-to-something-secret',
   mcEventsEnabled:              true,
   mcEventsChannelId:            '',
+  reactApplicationsEnabled:     true,
+  reactAppChannelId:            '',   // optional channel that mirrors every finished application
+  reactAppApprovedRoleId:       '',   // optional role granted on approval
 };
 
 // Per-server feature overrides — keyed by serverId
@@ -155,7 +166,10 @@ const stateStore = require('./state-db').createGameStateStore({
     data.announcements  = safe(saved.announcements, data.announcements);
     data.linkedAccounts = safe(saved.linkedAccounts, data.linkedAccounts);
     data.reverseLinks   = safe(saved.reverseLinks, data.reverseLinks);
+    data.linkedNames    = safe(saved.linkedNames, data.linkedNames);
     data.linkCodes      = safe(saved.linkCodes, data.linkCodes);
+    data.reactApplications = safe(saved.reactApplications, data.reactApplications);
+    data.ownerTodos     = safe(saved.ownerTodos, data.ownerTodos);
     data.mcServer       = { players: [], online: false, lastSeen: null, chatLog: [], eventLog: [], commandLog: [], ...(saved.mcServer || {}) };
     data.serverFeatures = safe(saved.serverFeatures, data.serverFeatures);
     if (Array.isArray(saved.counters)) {
@@ -1077,6 +1091,7 @@ app.post('/api/mc/link/confirm', (req, res) => {
   if (new Date(entry.expiresAt) < new Date()) { delete data.linkCodes[code]; return res.status(400).json({ error: 'Code expired' }); }
   data.linkedAccounts[entry.mcUUID] = discordId;
   data.reverseLinks[discordId] = entry.mcUUID;
+  if (entry.username) data.linkedNames[discordId] = entry.username;
   delete data.linkCodes[code];
   saveDb();
   res.json({ success: true, username: entry.username, mcUUID: entry.mcUUID });
@@ -1271,15 +1286,21 @@ if (fs.existsSync(path.join(dashboardDir, 'index.html'))) {
 const token = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;
 if (!token) { console.error('❌ DISCORD_BOT_TOKEN not set'); process.exit(1); }
 
-const { Client, GatewayIntentBits, Events, PermissionsBitField, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, ChannelType } = require('discord.js');
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
+    // React applications are a DM interview — without this intent the bot
+    // never sees the answers the applicant types back.
+    GatewayIntentBits.DirectMessages,
     GatewayIntentBits.MessageContent,
   ],
+  // A DM channel opened before the last restart arrives uncached; the partial
+  // keeps those replies usable instead of silently dropped.
+  partials: [Partials.Channel],
 });
 
 global.botClient = client;
@@ -1525,6 +1546,715 @@ client.on(Events.GuildMemberRemove, async (member) => {
   }
 });
 
+// ── React Applications ────────────────────────────────────────────────────────
+// `!Reactapp` DMs the player a short interview (react-applications.js), admins
+// review the answers from Discord and can ask the player to dim their powers
+// down or leave a comment, and every finished application is filed on the
+// owners' to-do list (`!todo`).
+const reactApp = require('./react-applications');
+
+// Extra Discord ids that may review applications / own the to-do list, on top
+// of the configured owner DM user and anyone with Manage Server.
+const ADMIN_DISCORD_IDS = (process.env.ADMIN_DISCORD_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+const OWNER_DISCORD_IDS = (process.env.OWNER_DISCORD_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+
+const reactAppsEnabled = () => features.reactApplicationsEnabled !== false;
+const appStore  = () => (data.reactApplications || (data.reactApplications = {}));
+const todoStore = () => (data.ownerTodos || (data.ownerTodos = {}));
+const appNum    = (a) => Number((String(a.id).match(/\d+/) || [0])[0]);
+const byAppNum  = (a, b) => appNum(a) - appNum(b);
+
+function isBotOwner(message) {
+  if (OWNER_DISCORD_IDS.includes(message.author.id)) return true;
+  return message.author.username?.toLowerCase() === NOTICE_DM_USERNAME;
+}
+function isAdmin(message) {
+  if (isBotOwner(message)) return true;
+  if (ADMIN_DISCORD_IDS.includes(message.author.id)) return true;
+  const perms = message.member?.permissions;
+  return !!(perms && (perms.has(PermissionsBitField.Flags.Administrator) || perms.has(PermissionsBitField.Flags.ManageGuild)));
+}
+
+/** 'RA-2' / 'ra2' / '2' all resolve to the same application. */
+function findApplication(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return null;
+  const store = appStore();
+  if (store[raw.toUpperCase()]) return store[raw.toUpperCase()];
+  const digits = raw.match(/\d+/);
+  return digits ? store[`RA-${Number(digits[0])}`] || null : null;
+}
+/** The application a DM reply should be routed into (one draft per player). */
+function activeApplication(discordId) {
+  return Object.values(appStore()).find(
+    a => a.discordId === String(discordId) && (a.status === 'draft' || a.status === 'needs_dim'),
+  ) || null;
+}
+/** An allowed request that is still waiting on the customer's final confirm. */
+function awaitingConfirmApplication(discordId) {
+  return Object.values(appStore()).find(
+    a => a.discordId === String(discordId) && reactApp.awaitingConfirm(a),
+  ) || null;
+}
+const applicationsFor = (discordId) => Object.values(appStore()).filter(a => a.discordId === String(discordId));
+
+async function sendDm(channelOwner, text) {
+  try { await channelOwner.channel.send(text); return true; }
+  catch (e) { console.error(`📋 DM reply failed: ${e.message}`); return false; }
+}
+
+// ── Owners' to-do list ───────────────────────────────────────────────────────
+async function ownerDmTargets() {
+  const c = global.botClient;
+  const found = new Map();
+  if (!c?.user) return [];
+  for (const u of c.users.cache.values()) {
+    if (u.bot) continue;
+    if (u.username?.toLowerCase() === NOTICE_DM_USERNAME || OWNER_DISCORD_IDS.includes(u.id)) found.set(u.id, u);
+  }
+  for (const id of OWNER_DISCORD_IDS) {
+    if (found.has(id)) continue;
+    try { found.set(id, await c.users.fetch(id)); } catch (_) { /* not reachable yet */ }
+  }
+  return [...found.values()];
+}
+
+/** DM every configured owner; returns how many messages actually went out. */
+async function dmOwners(text) {
+  let sent = 0;
+  for (const u of await ownerDmTargets()) {
+    try { await u.send(text); sent++; }
+    catch (e) { console.error(`📋 Owner DM to @${u.username} failed: ${e.message}`); }
+  }
+  return sent;
+}
+
+function addTodo({ type = 'task', appId = null, text, createdBy = null }) {
+  const id = `T-${counters.todo++}`;
+  todoStore()[id] = {
+    id, type, appId, text, status: 'open',
+    createdAt: new Date().toISOString(), createdBy, doneBy: null, doneAt: null,
+  };
+  saveDb();
+  return todoStore()[id];
+}
+const openTodos = () => Object.values(todoStore()).filter(t => t.status === 'open');
+function closeAppTodos(appId, byId) {
+  const at = new Date().toISOString();
+  let closed = 0;
+  for (const t of Object.values(todoStore())) {
+    if (t.status === 'open' && t.appId === appId) { t.status = 'done'; t.doneBy = byId; t.doneAt = at; closed++; }
+  }
+  if (closed) saveDb();
+  return closed;
+}
+
+// ── The DM interview ────────────────────────────────────────────────────────
+/** Starts a new application, or resumes the player's in-progress one. */
+async function beginApplication(message) {
+  // An allowed request that still needs the customer's final OK takes priority:
+  // they settle (or drop) that one before ordering anything new.
+  const pending = awaitingConfirmApplication(message.author.id);
+  if (pending) {
+    await message.author.send(reactApp.confirmOrderPrompt(pending));
+    return pending;
+  }
+  let app = activeApplication(message.author.id);
+  const resumed = !!app;
+  if (!app) {
+    app = reactApp.createDraft({
+      id: `RA-${counters.reactApp++}`,
+      discordId: message.author.id,
+      username: message.author.username,
+      guildId: message.guild?.id || null,
+      channelId: message.guild?.id ? null : message.channel.id,
+      // Offered as "reply yes" at the in-game-name question when we know it.
+      mcLinkedName: data.linkedNames?.[message.author.id] || '',
+    });
+    appStore()[app.id] = app;
+    saveDb();
+  }
+  const head = resumed
+    ? `↩️ **Resuming your React request \`${app.id}\` — picking up where you left off.**`
+    : `👋 **Welcome to the React request desk, ${message.author.username}!**`;
+  await message.author.send(`${head}\n\n${reactApp.promptFor(app)}`);
+  return app;
+}
+
+/** Files a submitted application with the owners. */
+async function fileApplication(app, applicant) {
+  const at = new Date().toISOString();
+  app.status = 'submitted';
+  app.submittedAt = app.submittedAt || at;
+  app.updatedAt = at;
+  // One open to-do item per application: a revision (after a dim-down) updates
+  // the existing line instead of stacking a second copy on the owners' list.
+  let todo = Object.values(todoStore()).find(t => t.status === 'open' && t.appId === app.id);
+  if (todo) {
+    todo.text = reactApp.renderApplicationTodo(app);
+    todo.updatedAt = at;
+  } else {
+    todo = addTodo({
+      type: 'react_application', appId: app.id,
+      text: reactApp.renderApplicationTodo(app), createdBy: app.discordId,
+    });
+  }
+  app.todoId = todo.id;
+  saveDb();
+
+  const header = [
+    `📥 **New React request \`${app.id}\`** — filed on the to-do list as \`${todo.id}\`.`,
+    '`!reactapp view ' + app.id + '` · `!reactapp comment ' + app.id + ' <text>` · '
+      + '`!reactapp dim ' + app.id + ' <text>` · `!reactapp approve ' + app.id + '` · `!reactapp reject ' + app.id + ' [reason]` · '
+      + '`!reactapp stage ' + app.id + ' making`',
+  ].join('\n');
+  const view = `${header}\n\n${reactApp.renderApplication(app)}`;
+
+  const dms = await dmOwners(view);
+  if (features.reactAppChannelId) sendToChannel(features.reactAppChannelId, view);
+  if (!dms && !features.reactAppChannelId) {
+    console.log(`📋 ${app.id} filed, but no owner is reachable by DM and no reactAppChannelId is set`);
+  }
+  try {
+    await applicant.send(
+      `✅ **Submitted!** Your React request \`${app.id}\` is on the owners' to-do list.\n`
+      + 'I will DM you here if they have questions — and again once they allow it, for your final confirm.',
+    );
+  } catch (_) { /* the interview channel may already be closed */ }
+}
+
+/** A player cancelled their own draft — kept on file so owners can still see it. */
+function withdrawApplication(app, at = new Date().toISOString()) {
+  app.status = 'withdrawn';
+  app.updatedAt = at;
+  saveDb();
+  return app;
+}
+
+/** Commands that should still reach the normal dispatcher from inside a DM. */
+const REACT_DM_PASSTHROUGH = new Set(['help', 'reactapp', 'todo', 'profile', 'balance', 'bal', 'stats']);
+
+// A customer answering the one question left on an allowed request: "still want
+// it?". Confirm words are prefix-matched ("yes please", "ok go"), declines are
+// exact so ordinary chatter never withdraws an order.
+const CONFIRM_WORDS = ['confirm', 'yes', 'yep', 'yeah', 'ok', 'okay', 'lock', 'accept', 'goahead', 'doit'];
+const DECLINE_WORDS = ['cancel', 'no', 'nope', 'stop', 'withdraw', 'nevermind', 'decline'];
+
+/**
+ * Handles the DMs that are not part of an interview: the customer's final
+ * confirm or cancel on an order the owners already allowed. Anything else falls
+ * through to the normal command dispatcher.
+ */
+async function handleOrderConfirmDm(message) {
+  const pending = awaitingConfirmApplication(message.author.id);
+  if (!pending) return false;
+  const text = message.content.trim();
+  const plain = text.replace(/^!+/, '').trim().toLowerCase().replace(/[^a-z]/g, '');
+  const firstWord = text.replace(/^!+/, '').split(/\s+/)[0].toLowerCase();
+  if (text.startsWith('!') && REACT_DM_PASSTHROUGH.has(firstWord)) return false;
+  if (DECLINE_WORDS.includes(plain)) {
+    withdrawApplication(pending);
+    closeAppTodos(pending.id, message.author.id);
+    await sendDm(message, `🚫 **Request \`${pending.id}\` withdrawn.** Type \`!Reactapp\` whenever you want to order something else.`);
+    return true;
+  }
+  if (CONFIRM_WORDS.some(w => plain.startsWith(w))) {
+    await confirmApplication(pending, { id: message.author.id, name: message.author.username });
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Routes one DM message into the player's open application.
+ * Returns false when the message is not part of an interview (the caller then
+ * falls through to the regular command dispatcher).
+ */
+async function handleApplicationDm(message) {
+  const app = activeApplication(message.author.id);
+  if (!app) return handleOrderConfirmDm(message);
+  const text = message.content.trim();
+  const firstWord = text.replace(/^!+/, '').split(/\s+/)[0].toLowerCase();
+  if (text.startsWith('!') && REACT_DM_PASSTHROUGH.has(firstWord)) return false;
+
+  const result = reactApp.answer(app, text);
+  if (result.cancelled) {
+    withdrawApplication(app);
+    await sendDm(message, `🚫 **Application \`${app.id}\` cancelled.** Type \`!Reactapp\` in the server whenever you want to try again.`);
+    return true;
+  }
+  if (result.error) {
+    await sendDm(message, `${result.error}\n\n${reactApp.promptFor(app)}`);
+    return true;
+  }
+  if (result.submitted) {
+    await fileApplication(app, message.author);
+    return true;
+  }
+  saveDb();
+  await sendDm(message, result.prompt);
+  return true;
+}
+
+// ── Review / to-do commands ──────────────────────────────────────────────────
+function reactAppUsage() {
+  return [
+    '**🎬 React requests** — spend a React Orb, order an item back',
+    '`!Reactapp` — start (or resume) your request in DMs',
+    '`!reactapp status` — where your requests are',
+    '`!reactapp confirm <id>` — lock in a request the owners allowed',
+    '`!reactapp cancel <id>` — withdraw one',
+    '**Owners/admins:**',
+    '`!reactapp list [pending]` · `!reactapp view <id>`',
+    '`!reactapp comment <id> <text>` · `!reactapp dim <id> <text>`',
+    '`!reactapp approve <id> [note]` — allow the item (the customer then confirms)',
+    '`!reactapp reject <id> [reason]`',
+    '`!reactapp stage <id> <not_started|making|almost|ready|delivered>` — move the delivery along',
+    '`!todo` — the owners\' to-do list',
+  ].join('\n');
+}
+
+function listApplications(message, onlyPending) {
+  const admin = isAdmin(message);
+  let list = admin ? Object.values(appStore()) : applicationsFor(message.author.id);
+  if (onlyPending) list = list.filter(a => a.status === 'submitted' || a.status === 'needs_dim');
+  if (!list.length) {
+    return message.reply(onlyPending ? '📭 Nothing waiting for review.' : 'No React applications yet.');
+  }
+  const open = list.filter(a => a.status === 'submitted' || a.status === 'needs_dim').sort(byAppNum);
+  const rest = list.filter(a => a.status !== 'submitted' && a.status !== 'needs_dim').sort(byAppNum);
+  const lines = [...open, ...rest].slice(0, 25).map(reactApp.renderApplicationLine);
+  const more = list.length > lines.length ? `\n*…and ${list.length - lines.length} more*` : '';
+  return message.reply(`**📋 React applications (${list.length})**\n${lines.join('\n')}${more}`);
+}
+
+async function reactAppCommand(message, args) {
+  const sub = (args[0] || '').toLowerCase();
+  const rest = args.slice(1);
+
+  // Applicant side: talk to MemeBot in DMs.
+  if (!sub || ['start', 'new', 'apply'].includes(sub)) return startApplicationFrom(message);
+  if (['status', 'mine'].includes(sub)) {
+    const mine = applicationsFor(message.author.id).sort(byAppNum);
+    if (!mine.length) return message.reply('You have no React applications yet — type `!Reactapp` to start one.');
+    return message.reply(`**🎬 Your React applications**\n${mine.slice(-10).map(reactApp.renderApplicationLine).join('\n')}`);
+  }
+  if (sub === 'list') return listApplications(message, false);
+
+  const adminOnly = ['pending', 'view', 'show', 'comment', 'note', 'dim', 'dimdown', 'approve', 'reject', 'deny', 'stage'];
+  const known = [...adminOnly, 'confirm', 'cancel', 'withdraw'];
+  if (!known.includes(sub)) {
+    return message.reply(`❓ I don't know \`${sub}\` for React apps.\n\n${reactAppUsage()}`);
+  }
+  if (sub === 'pending') {
+    if (!isAdmin(message)) return message.reply('❌ Only owners/admins can review React applications.');
+    return listApplications(message, true);
+  }
+
+  const app = findApplication(rest[0]);
+  if (!app) {
+    return message.reply(
+      `❌ No application matches \`${rest[0] || '—'}\`. `
+      + (isAdmin(message) ? 'Try `!reactapp list`.' : 'Try `!reactapp status`.'),
+    );
+  }
+  const admin = isAdmin(message);
+  if (!admin && app.discordId !== message.author.id) {
+    return message.reply('❌ That application is not yours.');
+  }
+  const note = rest.slice(1).join(' ').trim();
+
+  // Applicant side: lock in (or drop) a request the owners allowed.
+  if (sub === 'confirm') {
+    if (app.status === 'queued') return message.reply(`📦 \`${app.id}\` is already confirmed — it is in delivery.`);
+    if (!reactApp.awaitingConfirm(app)) {
+      return message.reply(`❌ \`${app.id}\` is ${reactApp.STATUS_LABELS[app.status] || app.status} — nothing to confirm yet.`);
+    }
+    await confirmApplication(app, { id: message.author.id, name: message.author.username });
+    return message.reply(`✅ \`${app.id}\` confirmed — the owners have been told to start on it.`);
+  }
+  if (sub === 'cancel' || sub === 'withdraw') {
+    if (reactApp.CLOSED_STATUSES.includes(app.status)) {
+      return message.reply(`❌ \`${app.id}\` is already ${reactApp.STATUS_LABELS[app.status] || app.status}.`);
+    }
+    withdrawApplication(app);
+    closeAppTodos(app.id, message.author.id);
+    return message.reply(`🚫 \`${app.id}\` withdrawn and taken off the owners' list.`);
+  }
+
+  if (sub === 'view' || sub === 'show') {
+    return message.reply(reactApp.renderApplication(app));
+  }
+  if ((sub === 'comment' || sub === 'note' || sub === 'dim' || sub === 'dimdown') && !admin) {
+    return message.reply('❌ Only owners/admins can review React applications.');
+  }
+  if (['approve', 'reject', 'deny'].includes(sub) && !admin) {
+    return message.reply('❌ Only owners/admins can review React applications.');
+  }
+  if (sub === 'stage' && !admin) {
+    return message.reply('❌ Only owners/admins can update delivery stages.');
+  }
+
+  const actor = { id: message.author.id, name: message.author.username };
+
+  if (sub === 'stage') {
+    const result = await setDeliveryStage(app, actor, rest[1], rest.slice(2).join(' ').trim());
+    if (result.error) return message.reply(`❌ ${result.error}`);
+    return message.reply(
+      `📦 \`${app.id}\` → **${result.stage.label}**`
+      + (result.closed ? ` and closed \`${result.closed}\` to-do item(s).` : '.'),
+    );
+  }
+
+  if (sub === 'comment' || sub === 'note') {
+    if (!note) return message.reply(`Usage: \`!reactapp comment ${app.id} <text>\``);
+    await reviewComment(app, actor, note);
+    return message.reply(`💬 Comment saved on \`${app.id}\` and DM'd to <@${app.discordId}>.`);
+  }
+
+  if (sub === 'dim' || sub === 'dimdown') {
+    if (!note) return message.reply(`Usage: \`!reactapp dim ${app.id} <what to tone down>\``);
+    await reviewDim(app, actor, note);
+    return message.reply(`🔻 Asked <@${app.discordId}> to dim \`${app.id}\` down — the application is reopened, and it stays on the to-do list.`);
+  }
+
+  if (sub === 'approve') {
+    const { already } = await reviewDecide(app, actor, 'approved', note);
+    if (already) return message.reply(`📦 \`${app.id}\` is already in the delivery pipeline — the note was recorded.`);
+    return message.reply(
+      `👍 Allowed \`${app.id}\` — waiting on <@${app.discordId}> to confirm the order. `
+      + 'It stays on the to-do list until it is delivered.',
+    );
+  }
+
+  // reject / deny
+  const { closed } = await reviewDecide(app, actor, 'rejected', note);
+  return message.reply(`❌ Rejected \`${app.id}\`${closed ? ` and closed \`${closed}\` to-do item(s)` : ''}.`);
+}
+
+/** DMs the applicant, quietly ignoring closed DMs. */
+async function dmApplicant(app, text) {
+  const c = global.botClient;
+  if (!c?.user || !app?.discordId) return false;
+  try {
+    const user = await c.users.fetch(app.discordId);
+    await user.send(text);
+    return true;
+  } catch (e) {
+    console.error(`📋 Applicant DM to ${app.discordId} failed: ${e.message}`);
+    return false;
+  }
+}
+
+// ── Shared review actions ───────────────────────────────────────────────────
+// The Discord commands and the dashboard tab both go through these, so an
+// approval from the web reaches the player exactly like one typed in Discord.
+// `actor` is { id, name } — a Discord user or a dashboard account.
+
+async function reviewComment(app, actor, text) {
+  const entry = reactApp.addComment(app, { byId: actor.id, byName: actor.name, text });
+  if (!entry) return null;
+  saveDb();
+  await dmApplicant(app, `💬 **${actor.name}** left a comment on your React application \`${app.id}\`:\n> ${entry.text}`);
+  return entry;
+}
+
+async function reviewDim(app, actor, text) {
+  app.dimNote = text;
+  app.reviewedBy = actor.name;
+  app.reviewedAt = new Date().toISOString();
+  reactApp.addComment(app, { byId: actor.id, byName: actor.name, text, kind: 'dim' });
+  // Reopen the interview so the player redoes their own answers.
+  reactApp.restartForRevision(app, app.reviewedAt);
+  saveDb();
+  await dmApplicant(
+    app,
+    `🔻 **Dim-down requested on \`${app.id}\`**\n**${actor.name}:** ${text}\n\n`
+    + `Let's go through your answers again with that in mind:\n\n${reactApp.promptFor(app)}`,
+  );
+  return app;
+}
+
+async function reviewDecide(app, actor, decision, note) {
+  const approved = decision === 'approved';
+  app.reviewedBy = actor.name;
+  app.reviewedAt = new Date().toISOString();
+  if (note) {
+    reactApp.addComment(app, {
+      byId: actor.id, byName: actor.name, text: note, kind: approved ? 'comment' : 'reject',
+    });
+  }
+  // Allowing a job that is already being built (or is done) only records the
+  // note — never push a confirmed order back to "waiting on the customer".
+  if (approved && (app.status === 'queued' || app.status === 'delivered')) {
+    saveDb();
+    return { closed: 0, approved: true, already: true };
+  }
+  app.status = approved ? 'approved' : 'rejected';
+  if (approved) { app.stage = null; app.stageAt = null; }
+  // An allowed request stays on the board: the customer still has to confirm it
+  // and an owner still has to build and deliver it. Only a rejection (or a
+  // delivery) takes the job off the to-do list.
+  const closed = approved ? 0 : closeAppTodos(app.id, actor.id);
+  if (approved) refreshAppTodo(app);
+  saveDb();
+  if (approved && features.reactAppApprovedRoleId && app.guildId) {
+    try {
+      const g = await client.guilds.fetch(app.guildId);
+      await assignRole(g, app.discordId, features.reactAppApprovedRoleId);
+    } catch (e) { console.error('React approval role grant failed:', e.message); }
+  }
+  await dmApplicant(app, approved
+    ? reactApp.confirmOrderPrompt(app) + (note ? `\n> ${note}` : '')
+    : `❌ **Not accepted** — your React request \`${app.id}\` was rejected.${note ? `\n> ${note}` : ''}\nYou can start a fresh one with \`!Reactapp\`.`);
+  return { closed, approved };
+}
+
+/** Keeps the open to-do line in step with the application (answers + stage). */
+function refreshAppTodo(app) {
+  const todo = Object.values(todoStore()).find(t => t.status === 'open' && t.appId === app.id);
+  if (!todo) return null;
+  todo.text = reactApp.renderApplicationTodo(app);
+  todo.updatedAt = new Date().toISOString();
+  return todo;
+}
+
+/**
+ * The customer's final "yes": the request stops being a proposal and becomes a
+ * job an owner builds and delivers. Confirm is safe to hit twice.
+ */
+async function confirmApplication(app, actor) {
+  if (!reactApp.awaitingConfirm(app) && app.status !== 'queued') return null;
+  const first = reactApp.awaitingConfirm(app);
+  reactApp.confirmOrder(app);
+  reactApp.addComment(app, {
+    byId: actor.id, byName: actor.name, kind: 'stage',
+    text: 'Order confirmed by the customer' + (first ? ` — ${reactApp.stageLabelOf(app)}.` : ' *(already confirmed)*.'),
+  });
+  refreshAppTodo(app);
+  saveDb();
+  if (!first) return app;
+  const view = [
+    `📦 **\`${app.id}\` confirmed — ready to build.**`,
+    reactApp.renderApplicationTodo(app),
+    `**In-game name:** ${app.mcUsername || '—'}`,
+    `**Delivery:** ${reactApp.deliveryLabel(app.delivery)}`,
+    `Collect the **${reactApp.tierOf(app)?.label || '—'} React Orb** in game, then \`!reactapp stage ${app.id} making\`.`,
+  ].join('\n');
+  await dmOwners(view);
+  if (features.reactAppChannelId) sendToChannel(features.reactAppChannelId, view);
+  await dmApplicant(
+    app,
+    `✅ **Order locked in — \`${app.id}\`!**\nAn owner will take your React Orb and start on it.\n`
+    + `**Delivery:** ${reactApp.deliveryLabel(app.delivery)}\nI'll DM you the moment it is ready.`,
+  );
+  return app;
+}
+
+/**
+ * Moves a request along the delivery pipeline (Not started → … → Delivered).
+ * `stageInput` accepts a key, a label, an alias or the button number.
+ */
+async function setDeliveryStage(app, actor, stageInput, note) {
+  const stage = reactApp.parseStage(stageInput);
+  if (!stage) {
+    return { error: `Unknown stage \`${String(stageInput || '').trim() || '—'}\` — use ${reactApp.DELIVERY_STAGES.map(s => `\`${s.key}\``).join(' → ')}.` };
+  }
+  if (!['approved', 'queued', 'delivered'].includes(app.status)) {
+    return { error: `\`${app.id}\` is ${reactApp.STATUS_LABELS[app.status] || app.status} — allow it before moving the delivery along.` };
+  }
+  const applied = reactApp.setStage(app, stage.key);
+  reactApp.addComment(app, {
+    byId: actor.id, byName: actor.name, kind: 'stage',
+    text: note ? `${applied.label} — ${note}` : applied.label,
+  });
+  const closed = applied.key === 'delivered' ? closeAppTodos(app.id, actor.id) : 0;
+  refreshAppTodo(app);
+  saveDb();
+  if (applied.key === 'ready') {
+    await dmApplicant(
+      app,
+      `📦 **Your item is ready!** \`${app.id}\` — **${app.name || 'untitled'}**\n`
+      + `**In-game name:** ${app.mcUsername || '—'}\n**Delivery:** ${reactApp.deliveryLabel(app.delivery)}`,
+    );
+  } else if (applied.key === 'delivered') {
+    await dmApplicant(app, `✅ **Delivered!** \`${app.id}\` is done — enjoy your **${app.item || 'item'}**.`);
+  }
+  return { stage: applied, closed };
+}
+
+// ── React application API (dashboard) ────────────────────────────────────────
+// Owner-scoped: the master account sees every application, a server owner only
+// sees the servers assigned to them (see dashboard-access-model.md). Applications
+// that were started from a DM have no guild, so they stay visible to owners.
+function dashboardActor(req) {
+  const account = getAccountById(req.user?.userId) || {};
+  return { id: req.user?.userId, name: account.username || account.email || 'owner' };
+}
+
+function visibleApplications(req) {
+  const all = Object.values(appStore()).sort(byAppNum);
+  if (req.user?.role === 'master') return all;
+  const mine = serverIdsForUser(req).map(String);
+  return all.filter(a => !a.guildId || mine.includes(String(a.guildId)));
+}
+
+function decorateApplication(app) {
+  const tier = reactApp.tierOf(app);
+  const todo = app.todoId ? todoStore()[app.todoId] : null;
+  return {
+    ...app,
+    tierLabel: tier?.label || null,
+    rank: tier?.rank || null,
+    statusLabel: reactApp.STATUS_LABELS[app.status] || app.status,
+    stageLabel: reactApp.stageLabelOf(app),
+    deliveryLabel: reactApp.deliveryLabel(app.delivery),
+    todoOpen: todo?.status === 'open',
+  };
+}
+
+/** Resolves :id, then checks the account may act on that application. */
+function applicationForRequest(req, res) {
+  const app = findApplication(req.params.id);
+  if (!app) { res.status(404).json({ error: 'Application not found' }); return null; }
+  if (req.user.role === 'master') return app;
+  const mine = serverIdsForUser(req).map(String);
+  if (app.guildId && !mine.includes(String(app.guildId))) {
+    res.status(403).json({ error: 'You do not have access to this application' });
+    return null;
+  }
+  return app;
+}
+
+app.get('/api/react-applications', authMiddleware, requireRole('master', 'owner'), (req, res) => {
+  res.json(visibleApplications(req).map(decorateApplication));
+});
+
+app.get('/api/react-applications/:id', authMiddleware, requireRole('master', 'owner'), (req, res) => {
+  const app = applicationForRequest(req, res);
+  if (app) res.json(decorateApplication(app));
+});
+
+app.post('/api/react-applications/:id/comment', authMiddleware, requireRole('master', 'owner'), async (req, res) => {
+  const app = applicationForRequest(req, res);
+  if (!app) return;
+  const text = String(req.body?.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'text required' });
+  const comment = await reviewComment(app, dashboardActor(req), text);
+  res.json({ success: true, comment, application: decorateApplication(app) });
+});
+
+app.post('/api/react-applications/:id/dim', authMiddleware, requireRole('master', 'owner'), async (req, res) => {
+  const app = applicationForRequest(req, res);
+  if (!app) return;
+  const text = String(req.body?.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'text required — say what needs to come down' });
+  await reviewDim(app, dashboardActor(req), text);
+  res.json({ success: true, application: decorateApplication(app) });
+});
+
+app.post('/api/react-applications/:id/approve', authMiddleware, requireRole('master', 'owner'), async (req, res) => {
+  const app = applicationForRequest(req, res);
+  if (!app) return;
+  const note = String(req.body?.text || '').trim();
+  const { closed } = await reviewDecide(app, dashboardActor(req), 'approved', note);
+  res.json({ success: true, closed, application: decorateApplication(app) });
+});
+
+app.post('/api/react-applications/:id/reject', authMiddleware, requireRole('master', 'owner'), async (req, res) => {
+  const app = applicationForRequest(req, res);
+  if (!app) return;
+  const note = String(req.body?.text || '').trim();
+  const { closed } = await reviewDecide(app, dashboardActor(req), 'rejected', note);
+  res.json({ success: true, closed, application: decorateApplication(app) });
+});
+
+app.post('/api/react-applications/:id/stage', authMiddleware, requireRole('master', 'owner'), async (req, res) => {
+  const app = applicationForRequest(req, res);
+  if (!app) return;
+  const stage = String(req.body?.stage || '').trim();
+  if (!stage) return res.status(400).json({ error: 'stage required' });
+  const result = await setDeliveryStage(app, dashboardActor(req), stage, String(req.body?.text || '').trim());
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json({ success: true, closed: result.closed, application: decorateApplication(app) });
+});
+
+app.get('/api/owner-todos', authMiddleware, requireRole('master', 'owner'), (req, res) => {
+  res.json(openTodos().sort((a, b) => String(a.id).localeCompare(String(b.id))).map(t => {
+    const app = t.appId ? findApplication(t.appId) : null;
+    return {
+      ...t,
+      application: app
+        ? {
+          id: app.id, name: app.name, item: app.item, tierLabel: reactApp.tierOf(app)?.label || null,
+          discordId: app.discordId, username: app.username, mcUsername: app.mcUsername || '', status: app.status,
+          stageLabel: reactApp.stageLabelOf(app), deliveryLabel: reactApp.deliveryLabel(app.delivery),
+        }
+        : null,
+    };
+  }));
+});
+
+app.post('/api/owner-todos/:id/done', authMiddleware, requireRole('master', 'owner'), (req, res) => {
+  const id = String(req.params.id || '').toUpperCase();
+  const todo = todoStore()[id];
+  if (!todo) return res.status(404).json({ error: 'To-do not found' });
+  if (todo.status !== 'open') return res.json({ success: true, alreadyDone: true });
+  todo.status = 'done';
+  todo.doneBy = dashboardActor(req).id;
+  todo.doneAt = new Date().toISOString();
+  saveDb();
+  res.json({ success: true });
+});
+
+/**
+ * `!Reactapp` — from a guild channel it opens a DM interview and points the
+ * player at it; typed in the DMs themselves it just asks the next question.
+ */
+async function startApplicationFrom(message) {
+  if (!reactAppsEnabled()) return message.reply('❌ React applications are disabled.');
+  try {
+    const app = await beginApplication(message);
+    if (!message.guild) return true;   // beginApplication already wrote into this DM
+    return message.reply(`📩 I've sent your React application **\`${app.id}\`** to your DMs — answer the questions there. Type \`cancel\` to stop at any point.`);
+  } catch (e) {
+    console.error('React application DM failed:', e.message);
+    return message.reply('❌ I could not DM you. Enable **Allow direct messages from server members** (Privacy Settings) and try again.');
+  }
+}
+
+async function todoCommand(message, args) {
+  if (!isAdmin(message)) return message.reply('❌ The owners\' to-do list is private.');
+  const sub = (args[0] || '').toLowerCase();
+  const open = openTodos();
+
+  if (!sub || sub === 'list') {
+    if (!open.length) return message.reply('📭 The to-do list is empty.');
+    const lines = open.slice(0, 25).map(t => `• \`${t.id}\` ${t.type === 'react_application' ? '🎬' : '📌'} ${t.text}${t.appId ? ` \`(${t.appId})\`` : ''}`);
+    const more = open.length > lines.length ? `\n*…and ${open.length - lines.length} more*` : '';
+    return message.reply(`**🗒️ Owners' to-do list (${open.length} open)**\n${lines.join('\n')}${more}\n\n\`!todo done <id>\` to check one off.`);
+  }
+  if (sub === 'done' || sub === 'close') {
+    const id = (args[1] || '').toUpperCase();
+    const todo = todoStore()[id] || open.find(t => t.id.toUpperCase() === id);
+    if (!todo) return message.reply('❓ Usage: `!todo done <id>` (see `!todo`)');
+    if (todo.status !== 'open') return message.reply(`✅ \`${todo.id}\` is already done.`);
+    todo.status = 'done';
+    todo.doneBy = message.author.id;
+    todo.doneAt = new Date().toISOString();
+    saveDb();
+    const tail = todo.appId ? ` — its application \`${todo.appId}\` stays on the board` : '';
+    return message.reply(`✅ \`${todo.id}\` checked off${tail}.`);
+  }
+  if (sub === 'add') {
+    const text = args.slice(1).join(' ').trim();
+    if (!text) return message.reply('Usage: `!todo add <what needs doing>`');
+    const todo = addTodo({ type: 'task', text, createdBy: message.author.id });
+    return message.reply(`📌 Added \`${todo.id}\` to the to-do list.`);
+  }
+  return message.reply(`**🗒️ Owner to-dos**\n\`!todo\` — list open items\n\`!todo add <text>\`\n\`!todo done <id>\``);
+}
+
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
 
@@ -1534,6 +2264,13 @@ client.on(Events.MessageCreate, async (message) => {
       const payload = JSON.stringify({ type: 'discord_chat', author: message.author.username, content: message.content });
       global.mcWsClients.forEach(ws => { if (ws.readyState === 1) ws.send(payload); });
     }
+  }
+
+  // React applications are a DM interview — answer them before the prefix
+  // check so an in-flight application keeps working even when guild commands
+  // are turned off or the player forgets the '!'.
+  if (!message.guild && reactAppsEnabled()) {
+    if (await handleApplicationDm(message)) return;
   }
 
   if (!features.commandsEnabled) return;
@@ -2178,6 +2915,7 @@ client.on(Events.MessageCreate, async (message) => {
   }
   else if (cmd === 'unlink') {
     const mcUUID = data.reverseLinks[message.author.id];
+    if (data.linkedNames) delete data.linkedNames[message.author.id];
     if (!mcUUID) return reply('❌ Your Discord is not linked to any Minecraft account.');
     delete data.linkedAccounts[mcUUID];
     delete data.reverseLinks[message.author.id];
@@ -2208,6 +2946,16 @@ client.on(Events.MessageCreate, async (message) => {
     reply(`**🎮 Linked Profile** <@${discordId}>\n🏛️ Civ: **${civ}** | ✝️ Religion: **${rel}** | 🛡️ Team: **${team}**\n💰 Gold: **${data.economy[discordId] || 0}** | ⭐ Level: **${u.level}**`);
   }
 
+  // ── React applications ────────────────────────────────────────────────────────
+  else if (cmd === 'reactapp' || cmd === 'reactapplication' || cmd === 'reactapps') {
+    await reactAppCommand(message, args);
+  }
+
+  // ── Owners' to-do list ───────────────────────────────────────────────────────
+  else if (cmd === 'todo' || cmd === 'todos' || cmd === 'mytodos') {
+    await todoCommand(message, args);
+  }
+
   // ── Help ──────────────────────────────────────────────────────────────────────
   else if (cmd === 'help') {
     const lines = ['**📜 Available Commands:**\n', '`!profile` `!help`'];
@@ -2222,7 +2970,8 @@ client.on(Events.MessageCreate, async (message) => {
     if (features.cultsEnabled)    lines.push('**🌑 Cults:** `!foundcult <n>|<obj>` `!joincult <id>` `!leavecult` `!cults` `!ritual`');
     if (features.warsEnabled)     lines.push('**⚔️ Diplomacy:** `!war <civId>` `!ally <civId>`');
     if (features.eventsEnabled)   lines.push('**📅 Events:** `!joinevent <id>` `!events`');
-    lines.push('**👑 Leader only:** `!promote @user` `!kick @user` `!disband` `!title @user <title>`');
+    lines.push('**🎬 React:** `!Reactapp` — apply for a React in DMs · `!reactapp status`');
+    lines.push('**👑 Owners/admins:** `!reactapp list` `!reactapp view <id>` `!reactapp comment <id> <txt>` `!reactapp dim <id> <txt>` `!reactapp approve|reject <id>` · `!todo` · `!promote @user` `!kick @user` `!disband` `!title @user <title>`');
     if (features.bridgeEnabled)     lines.push('**🎮 Minecraft:** `!link <code>` `!unlink` `!mcplayers` `!mcping` `!mcciv [@user]`');
     reply(lines.join('\n'));
   }
