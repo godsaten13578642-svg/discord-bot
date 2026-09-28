@@ -5,9 +5,21 @@ import LoginPage from './LoginPage';
 const getToken = () => localStorage.getItem('token') || '';
 const authHeaders = () => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` });
 
-const api  = (path, opts) => fetch(path, { headers: { 'Authorization': `Bearer ${getToken()}` }, ...opts }).then(r => r.json());
-const post = (path, body) => fetch(path, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) }).then(r => r.json());
-const del  = (path) => fetch(path, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getToken()}` } }).then(r => r.json());
+// A 401 means the stored token is gone (expired, or the server's secret was
+// rotated). Reject with a flagged error so load() can send the user back to the
+// login screen instead of rendering a dashboard built out of error payloads.
+const checkAuth = (r) => {
+  if (r.status === 401) { const e = new Error('Session expired'); e.unauthorized = true; throw e; }
+  return r.json();
+};
+const api  = (path, opts) => fetch(path, { headers: { 'Authorization': `Bearer ${getToken()}` }, ...opts }).then(checkAuth);
+const post = (path, body) => fetch(path, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) }).then(checkAuth);
+const del  = (path) => fetch(path, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getToken()}` } }).then(checkAuth);
+
+// Any list endpoint can answer with { error } instead of an array (expired
+// session, 500, a proxy page). Handing that to .map/.filter throws during render
+// and unmounts the whole app — a white screen instead of a visible message.
+const asArray = (v) => (Array.isArray(v) ? v : []);
 
 const TABS = ['Dashboard','Civilizations','Religions','Teams','Cults','Diplomacy','Economy','Events','React Apps','Members','Servers','Minecraft','Announcements','Settings','Accounts'];
 
@@ -40,6 +52,36 @@ const S = {
   section: { marginBottom: 24 },
   label:   { fontSize: 12, fontWeight: 700, color: '#666', marginBottom: 4, display: 'block' },
 };
+
+/**
+ * Catches any render crash and shows what broke. Without it a single thrown
+ * error unmounts the whole tree and the dashboard just goes white — which is
+ * indistinguishable from "the site is down".
+ */
+export class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { console.error('Dashboard crashed:', error, info?.componentStack); }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8f9fa', fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', padding: 24 }}>
+        <div style={{ background: 'white', borderRadius: 12, padding: 28, maxWidth: 560, boxShadow: '0 1px 6px rgba(0,0,0,.1)' }}>
+          <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>⚠️ The dashboard hit an error</div>
+          <div style={{ fontSize: 14, color: '#555', marginBottom: 14 }}>
+            Nothing was changed. Reloading usually clears it — if it keeps happening, this is the message to report.
+          </div>
+          <pre style={{ background: '#f5f5f5', borderRadius: 8, padding: 12, fontSize: 12, overflowX: 'auto', color: '#a00', marginBottom: 16 }}>
+            {String(this.state.error?.message || this.state.error)}
+          </pre>
+          <button onClick={() => window.location.reload()} style={{ background: '#0d6efd', color: 'white', border: 'none', borderRadius: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            Reload
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
 
 // "just now" / "4 min ago" — used by the last-synced badge and removal notice.
 function timeAgo(iso) {
@@ -320,16 +362,26 @@ export default function App() {
         api('/api/events'), api('/api/bounties'), api('/api/servers/sync-status').catch(() => null),
       ]);
       if (sync) setSyncStatus(sync);
+      const serverList = asArray(servers);
       setState(s => {
         // Auto-select first server if none selected yet
-        if (!selectedServerId && servers && servers.length > 0) {
-          setSelectedServerId(servers[0].serverId);
+        if (!selectedServerId && serverList.length > 0) {
+          setSelectedServerId(serverList[0].serverId);
         }
-        return { stats, bot, civs, users, servers, features, religions, teams, cults, rebels, alliances, economy, events, bounties };
+        return {
+          stats, bot, features, servers: serverList,
+          civs: asArray(civs), users: asArray(users),
+          religions: asArray(religions), teams: asArray(teams), cults: asArray(cults),
+          rebels: asArray(rebels), alliances: asArray(alliances), economy: asArray(economy),
+          events: asArray(events), bounties: asArray(bounties),
+        };
       });
       const chs = await api('/api/channels').catch(() => []);
       if (Array.isArray(chs)) setChannels(chs);
-    } catch (_) {}
+    } catch (e) {
+      // Expired/rotated token: back to the login screen, not a broken page.
+      if (e && e.unauthorized) handleLogout();
+    }
     loadAnnouncements();
     loadMcStatus();
     loadDownloads();
@@ -359,7 +411,7 @@ export default function App() {
     showToast(`Synced ${r.total} server(s) from Discord`);
     load();
   };
-  const removedServers = (state.servers || []).filter(s => s.goneAt);
+  const removedServers = asArray(state.servers).filter(s => s.goneAt);
 
   const setFeature = async (key, val) => {
     setState(s => ({ ...s, features: { ...s.features, [key]: val } }));
