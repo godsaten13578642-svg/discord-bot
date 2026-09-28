@@ -3,7 +3,8 @@ name: React Orb requests (!Reactapp)
 description: How players order an item with a React Orb in DMs and how owners review, build and deliver it.
 ---
 
-**Rule:** `!Reactapp` is an **orb-for-item request queue**, not a React-design submission. A player
+**Rule:** `/reactapp` (the `!Reactapp` prefix still works — see [slash commands](slash-commands.md))
+is an **orb-for-item request queue**, not a React-design submission. A player
 spends a React Orb and asks for an item back; the orb hand-over and the item delivery both happen
 **in game** (never over Discord), and the app exists so nobody has to catch an owner in real time.
 
@@ -25,14 +26,14 @@ Every tier then answers two logistics questions, in this order:
 That list is `fieldsForTier(tier)` in `react-applications.js` (design fields → name → delivery).
 
 The lifecycle is **draft → submitted → allowed → queued → delivered**:
-- `submit` files the request on the owners' to-do list as a `T-` item (`!todo`) and DMs every owner.
-- Owners/admins review with `!reactapp list|pending|view|comment|dim|approve|reject <id>`;
+- `submit` files the request on the owners' to-do list as a `T-` item (`/todo`) and DMs every owner.
+- Owners/admins review with `/reactapp list|pending|view|comment|dim|approve|reject <id>`;
   `dim <id> <text>` records the note **and reopens the interview** so the player redoes their own
   answers.
-- **Allowing does not close the job.** The customer is asked to confirm the order; `!reactapp confirm
+- **Allowing does not close the job.** The customer is asked to confirm the order; `/reactapp confirm
   <id>` (or just replying `confirm` to the DM) moves it to `queued` with stage `not_started`.
   Only a **rejection** or a **delivery** closes the to-do item.
-- Owners walk the delivery board with `!reactapp stage <id> <not_started|making|almost|ready|delivered>`
+- Owners walk the delivery board with `/reactapp stage <id> <not_started|making|almost|ready|delivered>`
   (keys, labels, aliases like `done`, or button numbers all parse). `ready` and `delivered` DM the
   customer; `delivered` is terminal and closes the to-do item.
 
@@ -44,9 +45,10 @@ wants.
 - Pure flow lives in `react-applications.js` (no discord.js — test it directly); Discord wiring,
   owner DMs and the to-do list live in `server.js` under the "React Applications" banner.
 - Review and delivery actions are shared: `reviewComment` / `reviewDim` / `reviewDecide` /
-  `confirmApplication` / `setDeliveryStage` in `server.js` are called by both the `!reactapp`
+  `confirmApplication` / `setDeliveryStage` in `server.js` are called by both the `/reactapp`
   commands and the dashboard API, with an `{ id, name }` actor — never fork the logic, or Discord and
-  the web will drift. `setDeliveryStage` also closes the to-do item on `delivered`.
+  the web will drift. `setDeliveryStage` also closes the to-do item on `delivered`. The Discord side
+  is registered in `SLASH_COMMANDS` (see [slash commands](slash-commands.md)).
 - Dashboard endpoints (owner/master, scoped by `serverIdsForUser`; a DM-started request has no
   guild, so it stays visible to owners):
   `GET /api/react-applications` · `GET /api/react-applications/:id` ·
@@ -67,4 +69,5 @@ wants.
 - Admin check order: configured owner DM username → `OWNER_DISCORD_IDS`/`ADMIN_DISCORD_IDS` env →
   Discord `Manage Server`/`Administrator`.
 - Tests: `test-react-applications.js` (state machine) and `test-react-app-commands.js` (boots
-  server.js against a stubbed gateway and drives the whole flow).
+  server.js against a stubbed gateway and drives the whole flow, including the slash-command
+  registration + interaction path).

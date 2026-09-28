@@ -177,6 +177,31 @@ function mkMessage({ content, author, guild = 'guild-1', admin = false, bucket =
 async function fire(message) {
   for (const handler of global.botClient.handlers[Events.MessageCreate] || []) await handler(message);
 }
+
+// ── Slash-command plumbing ───────────────────────────────────────────────────
+let interactionDefers = 0;
+const bucketFor = (bucket, payload) => { bucket.push(typeof payload === 'string' ? payload : payload.content); return {}; };
+
+/** A chat-input interaction shaped like discord.js, recorded into `bucket`. */
+function mkInteraction({ name, options = {}, user = OWNER, guild = 'guild-1', bucket = sent.owner, member = { permissions: { has: () => true } } }) {
+  return {
+    isChatInputCommand: () => true,
+    commandName: name,
+    user,
+    member: guild ? member : null,
+    guild: guild ? { id: `${guild}-int`, name: guild } : null,
+    channelId: guild ? 'chan-int' : `dm-${user.id}`,
+    channel: { id: 'chan-int', send: async (t) => bucketFor(bucket, t) },
+    options: { data: Object.entries(options).map(([n, v]) => ({ name: n, value: v, type: 3 })) },
+    deferReply: async () => { interactionDefers++; return {}; },
+    editReply: async (p) => bucketFor(bucket, p),
+    followUp: async (p) => bucketFor(bucket, p),
+    reply: async (p) => bucketFor(bucket, p),
+  };
+}
+const fireInteraction = async (interaction) => {
+  for (const handler of global.botClient.handlers[Events.InteractionCreate] || []) await handler(interaction);
+};
 const say       = (author, content, opts = {}) => fire(mkMessage({ content, author, ...opts }));
 const dmTo      = (author, content) => fire(mkMessage({ content, author, guild: null, bucket: sent.applicant }));
 const ownerSays = (content, opts = {}) => fire(mkMessage({ content, author: OWNER, guild: null, bucket: sent.owner, ...opts }));
@@ -464,6 +489,58 @@ async function main() {
   const apiPersisted = JSON.parse(fs.readFileSync(path.join(tmp, 'db.json'), 'utf8'));
   assert(apiPersisted.reactApplications['RA-3'].status === 'delivered', 'dashboard delivery persisted to the store');
   assert(Object.values(apiPersisted.ownerTodos).every(t => t.status === 'done'), 'every to-do item is closed at the end');
+
+  // ── 12. Servers show up as soon as the bot is in them ────────────────────
+  const guildHandlers = global.botClient.handlers[Events.GuildCreate] || [];
+  assert(guildHandlers.length === 1, 'the bot listens for guild joins');
+  let registeredSlash = [];
+  await guildHandlers[0]({
+    id: 'guild-777', name: 'Late Joiners',
+    commands: { set: (cmds) => { registeredSlash = cmds; return Promise.resolve(); } },
+  });
+  const serversRes = await callApi('get /api/servers', { user: MASTER });
+  assert(serversRes.body.some(s => s.serverId === 'guild-777' && s.serverName === 'Late Joiners'),
+    'a server the bot joins appears in the dashboard without a restart');
+  await wait(1700);
+  const serverPersisted = JSON.parse(fs.readFileSync(path.join(tmp, 'db.json'), 'utf8'));
+  assert(serverPersisted.servers?.['guild-777']?.serverName === 'Late Joiners',
+    'the joined server is persisted, not just cached in memory');
+
+  // ── 13. Slash commands: registered, validated, and the same implementation ─
+  const slashNames = registeredSlash.map(c => c.name);
+  assert(registeredSlash.length >= 50, `${registeredSlash.length} slash commands are registered`);
+  assert(['help', 'reactapp', 'todo', 'secret'].every(n => slashNames.includes(n)),
+    'the suite covers help, reactapp, todo and the owner-only secret');
+  assert(slashNames.every(n => /^[-_\p{L}\p{N}]{1,32}$/u.test(n)), 'every command name passes Discord\'s rules');
+  assert(registeredSlash.every(c => c.description && c.description.length <= 100
+    && (c.options || []).every(o => /^[-_\p{L}\p{N}]{1,32}$/u.test(o.name) && o.description && o.description.length <= 100)),
+    'every description and option name fits Discord\'s limits');
+
+  sent.owner.length = 0;
+  await fireInteraction(mkInteraction({ name: 'todo', options: { args: 'add buy more torches' } }));
+  assert(/Added `T-\d+`/.test(sent.owner.join('\n')), '/todo add runs through the interaction adapter');
+  assert(interactionDefers > 0, 'slash replies are deferred before the command runs');
+  await wait(1700);
+  const slashTodo = JSON.parse(fs.readFileSync(path.join(tmp, 'db.json'), 'utf8'));
+  assert(Object.values(slashTodo.ownerTodos).some(t => t.text === 'buy more torches' && t.status === 'open'),
+    'free text from the slash option is split into args and stored');
+
+  sent.applicant.length = 0;
+  await fireInteraction(mkInteraction({
+    name: 'todo', user: APPLICANT, bucket: sent.applicant,
+    member: { permissions: { has: () => false } },
+  }));
+  assert(has(sent.applicant, 'private'), 'the slash path keeps the same owner-only checks');
+
+  sent.owner.length = 0;
+  await fireInteraction(mkInteraction({ name: 'rps', options: { choice: 'rock' } }));
+  assert(has(sent.owner, 'vs') && hasAny(sent.owner, ['You win!', 'You lose!', 'Tie!']),
+    'a named option lands in args[0] like the prefix path');
+
+  sent.owner.length = 0;
+  await fireInteraction(mkInteraction({ name: 'help' }));
+  assert(has(sent.owner, 'Available Commands') && has(sent.owner, '`/reactapp`') && has(sent.owner, '`!` prefix'),
+    'the help text lists the slash commands and the kept prefix');
 
   if (failures) { console.error(`\n❌ ${failures} react-command check(s) failed`); process.exitCode = 1; }
   else console.log('\n✅ all react-command checks passed');

@@ -1,5 +1,6 @@
 // ── React Applications ───────────────────────────────────────────────────────
-// The state machine behind `!Reactapp`. MemeBot DMs the player a short
+// The state machine behind `/Reactapp` (and the `!Reactapp` alias). MemeBot DMs
+// the player a short
 // interview, collects exactly the fields their tier needs, then files the
 // finished request on the owners' to-do list.
 //
@@ -330,7 +331,7 @@ function promptFor(app) {
   if (!app) return tierPrompt(null);
   if (app.step === 'tier') return tierPrompt(app);
   if (app.step === 'confirm') return confirmPrompt(app);
-  if (app.step === 'done') return '✅ Your request is already with the owners. Type `!Reactapp` to start a new one.';
+  if (app.step === 'done') return '✅ Your request is already with the owners. Type `/Reactapp` to start a new one.';
   return fieldPrompt(app, app.step);
 }
 
@@ -453,7 +454,7 @@ function answer(app, raw, at = new Date().toISOString()) {
   }
 
   if (app.step === 'done') {
-    return { ok: false, error: '✅ That request is already submitted. Type `!Reactapp` to start a new one.' };
+    return { ok: false, error: '✅ That request is already submitted. Type `/Reactapp` to start a new one.' };
   }
 
   if (text.length > MAX_ANSWER * 4) {
@@ -532,7 +533,7 @@ function renderApplication(app, { mention = true } = {}) {
   return out.join('\n');
 }
 
-/** One line per application, for `!Reactapp list` / `!todo`. */
+/** One line per application, for `/reactapp list` / `/todo`. */
 function renderApplicationLine(app) {
   const tier = tierOf(app);
   const stage = stageLabelOf(app);

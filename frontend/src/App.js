@@ -373,7 +373,7 @@ export default function App() {
                 >
                   {servers && servers.length > 0
                     ? servers.map(s => <option key={s.serverId} value={s.serverId}>{s.serverName}</option>)
-                    : <option value="">No servers yet</option>
+                    : <option value="">{bot && !bot.online ? 'No servers — bot offline' : 'No servers yet'}</option>
                   }
                 </select>
               </div>
@@ -753,7 +753,14 @@ export default function App() {
                   ))}
                 </tbody>
               </table>
-              {!servers.length && <EmptyState icon="🖥️" text="No servers yet — add one above" />}
+              {!servers.length && (
+                <EmptyState
+                  icon="🖥️"
+                  text={bot && !bot.online
+                    ? 'No servers listed — the bot is offline, so it cannot see your Discord servers. Start the bot (or add one by ID above) to load them.'
+                    : 'No servers yet — add one above'}
+                />
+              )}
             </div>
           </div>
         )}
@@ -1408,7 +1415,7 @@ export default function App() {
 
             {/* React Applications */}
             <SettingsGroup title="React Applications" icon="🎬">
-              <Toggle label="React Applications" description="!Reactapp DMs players an application; finished ones land on the owners' to-do list" checked={features.reactApplicationsEnabled} onChange={v => toggleFeature('reactApplicationsEnabled', v)} />
+              <Toggle label="React Applications" description="/reactapp DMs players an interview; allowed orders land on the owners' to-do list and the delivery board below" checked={features.reactApplicationsEnabled} onChange={v => toggleFeature('reactApplicationsEnabled', v)} />
                <ChannelSelect label="Applications Channel" description="Optional — mirror every finished application into a channel" value={features.reactAppChannelId} onChange={v => setFeature('reactAppChannelId', v)} channels={serverChannels} enabled={features.reactApplicationsEnabled} />
               <Input label="Approved Role ID" value={features.reactAppApprovedRoleId || ''} onChange={v => setFeature('reactAppApprovedRoleId', v)} placeholder="Role granted to an applicant on approval (optional)" />
             </SettingsGroup>

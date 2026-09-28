@@ -659,7 +659,7 @@ app.post('/api/events/create', (req, res) => {
   data.events[id] = { id, name, type: type || 'general', serverId, participants: [], status: 'open', reward: 200, createdAt: new Date() };
   saveDb();
   if (features.eventsChannelId)
-    sendToChannel(features.eventsChannelId, `📅 **New Event!** **${name}** is now open — type \`!joinevent ${id}\` to enter!`);
+    sendToChannel(features.eventsChannelId, `📅 **New Event!** **${name}** is now open — type \`/joinevent ${id}\` to enter!`);
   res.json({ success: true, eventId: id, event: data.events[id] });
 });
 app.post('/api/events/:id/join', (req, res) => {
@@ -1439,11 +1439,34 @@ function scheduleGiveaway(giveaway) {
   setTimeout(() => endGiveaway(giveaway), Math.min(delay, 2147483647));
 }
 
+/**
+ * Registers a guild the bot can see so it shows up in the dashboard's server
+ * picker. Discord only tells us about guilds while we are connected, so an
+ * offline bot leaves the dashboard with nothing to select — that is what the
+ * "No servers yet" state usually means.
+ */
+function registerGuild(guild) {
+  if (!guild?.id) return false;
+  const existing = data.servers[guild.id];
+  if (existing && existing.serverName === guild.name) return false;
+  data.servers[guild.id] = {
+    ...(existing || {}),
+    serverId: guild.id,
+    serverName: guild.name,
+    setupAt: existing?.setupAt || new Date(),
+    syncedAt: new Date(),
+  };
+  if (!data.serverFeatures[guild.id]) data.serverFeatures[guild.id] = {};
+  saveDb();
+  return true;
+}
+
 client.once(Events.ClientReady, (c) => {
   console.log(`✅ Discord bot logged in as ${c.user.tag}`);
   global.__botActive = true;
   // Spin-down/wake-up notices are private DMs — see sendStatusNotice().
-  c.guilds.cache.forEach(g => { if (!data.servers[g.id]) data.servers[g.id] = { serverId: g.id, serverName: g.name, setupAt: new Date() }; });
+  const registered = c.guilds.cache.reduce((n, g) => n + (registerGuild(g) ? 1 : 0), 0);
+  if (registered) console.log(`🖥️  Registered ${registered} Discord server(s) with the dashboard`);
   // Reschedule any active giveaways that survived a restart
   Object.values(data.giveaways).forEach(g => { if (!g.ended) scheduleGiveaway(g); });
   // Reschedule any pending announcements
@@ -1472,9 +1495,14 @@ client.once(Events.ClientReady, (c) => {
     }
   };
 
-  // ── /secret slash command (owner-only, instant per-guild registration) ──
-  const SECRET_SLASH_COMMAND = { name: 'secret', description: '🤫 Owner-only. Reveals a private secret.' };
-  c.guilds.cache.forEach(g => { g.commands.set([SECRET_SLASH_COMMAND]).catch(() => {}); });
+  // ── Slash commands ───────────────────────────────────────────────────────
+  // Registered globally so servers joined later get them automatically, and
+  // per guild as well so they appear instantly instead of waiting for the
+  // global commands to propagate.
+  c.guilds.cache.forEach(g => { g.commands.set(ALL_SLASH_COMMANDS).catch(() => {}); });
+  c.application.commands.set(ALL_SLASH_COMMANDS)
+    .then(cmds => console.log(`💬 Registered ${cmds.size} slash command(s)`))
+    .catch(e => console.error(`⚠️  Slash command registration failed: ${e.message}`));
   // Retry any status notices that were queued before memegodmidas appeared.
   const flushNotices = async (user) => {
     if (!user || user.bot || user.username?.toLowerCase() !== NOTICE_DM_USERNAME) return;
@@ -1496,7 +1524,9 @@ client.once(Events.ClientReady, (c) => {
 // /secret handler — ephemeral reply means only the invoking user ever sees
 // the response. Anyone who isn't the owner gets a polite nothing.
 client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand() || interaction.commandName !== 'secret') return;
+  if (!interaction.isChatInputCommand()) return;
+  // Everything except the owner-only secret runs through the shared chain.
+  if (interaction.commandName !== 'secret') return handleSlashCommand(interaction);
   const isOwner = interaction.user.username?.toLowerCase() === NOTICE_DM_USERNAME;
   try {
     if (isOwner) await interaction.reply({ content: SECRET_DM_TEXT, ephemeral: true });
@@ -1504,9 +1534,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
   } catch (_) { /* interaction may have expired */ }
 });
 
-// Register /secret in guilds the bot joins after boot.
+// Register /secret in guilds the bot joins after boot, and make sure a newly
+// joined server shows up in the dashboard without waiting for a restart.
 client.on(Events.GuildCreate, (g) => {
-  g.commands.set([{ name: 'secret', description: '🤫 Owner-only. Reveals a private secret.' }]).catch(() => {});
+  if (registerGuild(g)) console.log(`🖥️  Joined ${g.name} — added it to the dashboard`);
+  // Instant slash commands here — the global ones can take up to an hour.
+  g.commands.set(ALL_SLASH_COMMANDS).catch(() => {});
 });
 
 // The gateway can drop without the process dying (Render network hiccups);
@@ -1528,10 +1561,10 @@ client.on(Events.GuildMemberAdd, async (member) => {
     const chId = features.welcomeChannelId;
     if (chId) {
       const ch = member.guild.channels.cache.get(chId);
-      if (ch) ch.send(`👋 Welcome to **${member.guild.name}**, <@${member.id}>! Type \`!help\` to see what you can do.`).catch(() => {});
+      if (ch) ch.send(`👋 Welcome to **${member.guild.name}**, <@${member.id}>! Type \`/help\` to see what you can do.`).catch(() => {});
     } else {
       const sys = member.guild.systemChannel;
-      if (sys) sys.send(`👋 Welcome to **${member.guild.name}**, <@${member.id}>! Type \`!help\` to see what you can do.`).catch(() => {});
+      if (sys) sys.send(`👋 Welcome to **${member.guild.name}**, <@${member.id}>! Type \`/help\` to see what you can do.`).catch(() => {});
     }
   }
 });
@@ -1547,10 +1580,10 @@ client.on(Events.GuildMemberRemove, async (member) => {
 });
 
 // ── React Applications ────────────────────────────────────────────────────────
-// `!Reactapp` DMs the player a short interview (react-applications.js), admins
+// `/Reactapp` DMs the player a short interview (react-applications.js), admins
 // review the answers from Discord and can ask the player to dim their powers
 // down or leave a comment, and every finished application is filed on the
-// owners' to-do list (`!todo`).
+// owners' to-do list (`/todo`).
 const reactApp = require('./react-applications');
 
 // Extra Discord ids that may review applications / own the to-do list, on top
@@ -1704,9 +1737,9 @@ async function fileApplication(app, applicant) {
 
   const header = [
     `📥 **New React request \`${app.id}\`** — filed on the to-do list as \`${todo.id}\`.`,
-    '`!reactapp view ' + app.id + '` · `!reactapp comment ' + app.id + ' <text>` · '
-      + '`!reactapp dim ' + app.id + ' <text>` · `!reactapp approve ' + app.id + '` · `!reactapp reject ' + app.id + ' [reason]` · '
-      + '`!reactapp stage ' + app.id + ' making`',
+    '`/reactapp view ' + app.id + '` · `/reactapp comment ' + app.id + ' <text>` · '
+      + '`/reactapp dim ' + app.id + ' <text>` · `/reactapp approve ' + app.id + '` · `/reactapp reject ' + app.id + ' [reason]` · '
+      + '`/reactapp stage ' + app.id + ' making`',
   ].join('\n');
   const view = `${header}\n\n${reactApp.renderApplication(app)}`;
 
@@ -1755,7 +1788,7 @@ async function handleOrderConfirmDm(message) {
   if (DECLINE_WORDS.includes(plain)) {
     withdrawApplication(pending);
     closeAppTodos(pending.id, message.author.id);
-    await sendDm(message, `🚫 **Request \`${pending.id}\` withdrawn.** Type \`!Reactapp\` whenever you want to order something else.`);
+    await sendDm(message, `🚫 **Request \`${pending.id}\` withdrawn.** Type \`/Reactapp\` whenever you want to order something else.`);
     return true;
   }
   if (CONFIRM_WORDS.some(w => plain.startsWith(w))) {
@@ -1780,7 +1813,7 @@ async function handleApplicationDm(message) {
   const result = reactApp.answer(app, text);
   if (result.cancelled) {
     withdrawApplication(app);
-    await sendDm(message, `🚫 **Application \`${app.id}\` cancelled.** Type \`!Reactapp\` in the server whenever you want to try again.`);
+    await sendDm(message, `🚫 **Application \`${app.id}\` cancelled.** Type \`/Reactapp\` in the server whenever you want to try again.`);
     return true;
   }
   if (result.error) {
@@ -1800,17 +1833,17 @@ async function handleApplicationDm(message) {
 function reactAppUsage() {
   return [
     '**🎬 React requests** — spend a React Orb, order an item back',
-    '`!Reactapp` — start (or resume) your request in DMs',
-    '`!reactapp status` — where your requests are',
-    '`!reactapp confirm <id>` — lock in a request the owners allowed',
-    '`!reactapp cancel <id>` — withdraw one',
+    '`/Reactapp` — start (or resume) your request in DMs',
+    '`/reactapp status` — where your requests are',
+    '`/reactapp confirm <id>` — lock in a request the owners allowed',
+    '`/reactapp cancel <id>` — withdraw one',
     '**Owners/admins:**',
-    '`!reactapp list [pending]` · `!reactapp view <id>`',
-    '`!reactapp comment <id> <text>` · `!reactapp dim <id> <text>`',
-    '`!reactapp approve <id> [note]` — allow the item (the customer then confirms)',
-    '`!reactapp reject <id> [reason]`',
-    '`!reactapp stage <id> <not_started|making|almost|ready|delivered>` — move the delivery along',
-    '`!todo` — the owners\' to-do list',
+    '`/reactapp list [pending]` · `/reactapp view <id>`',
+    '`/reactapp comment <id> <text>` · `/reactapp dim <id> <text>`',
+    '`/reactapp approve <id> [note]` — allow the item (the customer then confirms)',
+    '`/reactapp reject <id> [reason]`',
+    '`/reactapp stage <id> <not_started|making|almost|ready|delivered>` — move the delivery along',
+    '`/todo` — the owners\' to-do list',
   ].join('\n');
 }
 
@@ -1836,7 +1869,7 @@ async function reactAppCommand(message, args) {
   if (!sub || ['start', 'new', 'apply'].includes(sub)) return startApplicationFrom(message);
   if (['status', 'mine'].includes(sub)) {
     const mine = applicationsFor(message.author.id).sort(byAppNum);
-    if (!mine.length) return message.reply('You have no React applications yet — type `!Reactapp` to start one.');
+    if (!mine.length) return message.reply('You have no React applications yet — type `/Reactapp` to start one.');
     return message.reply(`**🎬 Your React applications**\n${mine.slice(-10).map(reactApp.renderApplicationLine).join('\n')}`);
   }
   if (sub === 'list') return listApplications(message, false);
@@ -1855,7 +1888,7 @@ async function reactAppCommand(message, args) {
   if (!app) {
     return message.reply(
       `❌ No application matches \`${rest[0] || '—'}\`. `
-      + (isAdmin(message) ? 'Try `!reactapp list`.' : 'Try `!reactapp status`.'),
+      + (isAdmin(message) ? 'Try `/reactapp list`.' : 'Try `/reactapp status`.'),
     );
   }
   const admin = isAdmin(message);
@@ -1907,13 +1940,13 @@ async function reactAppCommand(message, args) {
   }
 
   if (sub === 'comment' || sub === 'note') {
-    if (!note) return message.reply(`Usage: \`!reactapp comment ${app.id} <text>\``);
+    if (!note) return message.reply(`Usage: \`/reactapp comment ${app.id} <text>\``);
     await reviewComment(app, actor, note);
     return message.reply(`💬 Comment saved on \`${app.id}\` and DM'd to <@${app.discordId}>.`);
   }
 
   if (sub === 'dim' || sub === 'dimdown') {
-    if (!note) return message.reply(`Usage: \`!reactapp dim ${app.id} <what to tone down>\``);
+    if (!note) return message.reply(`Usage: \`/reactapp dim ${app.id} <what to tone down>\``);
     await reviewDim(app, actor, note);
     return message.reply(`🔻 Asked <@${app.discordId}> to dim \`${app.id}\` down — the application is reopened, and it stays on the to-do list.`);
   }
@@ -2006,7 +2039,7 @@ async function reviewDecide(app, actor, decision, note) {
   }
   await dmApplicant(app, approved
     ? reactApp.confirmOrderPrompt(app) + (note ? `\n> ${note}` : '')
-    : `❌ **Not accepted** — your React request \`${app.id}\` was rejected.${note ? `\n> ${note}` : ''}\nYou can start a fresh one with \`!Reactapp\`.`);
+    : `❌ **Not accepted** — your React request \`${app.id}\` was rejected.${note ? `\n> ${note}` : ''}\nYou can start a fresh one with \`/Reactapp\`.`);
   return { closed, approved };
 }
 
@@ -2039,7 +2072,7 @@ async function confirmApplication(app, actor) {
     reactApp.renderApplicationTodo(app),
     `**In-game name:** ${app.mcUsername || '—'}`,
     `**Delivery:** ${reactApp.deliveryLabel(app.delivery)}`,
-    `Collect the **${reactApp.tierOf(app)?.label || '—'} React Orb** in game, then \`!reactapp stage ${app.id} making\`.`,
+    `Collect the **${reactApp.tierOf(app)?.label || '—'} React Orb** in game, then \`/reactapp stage ${app.id} making\`.`,
   ].join('\n');
   await dmOwners(view);
   if (features.reactAppChannelId) sendToChannel(features.reactAppChannelId, view);
@@ -2208,7 +2241,7 @@ app.post('/api/owner-todos/:id/done', authMiddleware, requireRole('master', 'own
 });
 
 /**
- * `!Reactapp` — from a guild channel it opens a DM interview and points the
+ * `/Reactapp` — from a guild channel it opens a DM interview and points the
  * player at it; typed in the DMs themselves it just asks the next question.
  */
 async function startApplicationFrom(message) {
@@ -2232,12 +2265,12 @@ async function todoCommand(message, args) {
     if (!open.length) return message.reply('📭 The to-do list is empty.');
     const lines = open.slice(0, 25).map(t => `• \`${t.id}\` ${t.type === 'react_application' ? '🎬' : '📌'} ${t.text}${t.appId ? ` \`(${t.appId})\`` : ''}`);
     const more = open.length > lines.length ? `\n*…and ${open.length - lines.length} more*` : '';
-    return message.reply(`**🗒️ Owners' to-do list (${open.length} open)**\n${lines.join('\n')}${more}\n\n\`!todo done <id>\` to check one off.`);
+    return message.reply(`**🗒️ Owners' to-do list (${open.length} open)**\n${lines.join('\n')}${more}\n\n\`/todo done <id>\` to check one off.`);
   }
   if (sub === 'done' || sub === 'close') {
     const id = (args[1] || '').toUpperCase();
     const todo = todoStore()[id] || open.find(t => t.id.toUpperCase() === id);
-    if (!todo) return message.reply('❓ Usage: `!todo done <id>` (see `!todo`)');
+    if (!todo) return message.reply('❓ Usage: `/todo done <id>` (see `/todo`)');
     if (todo.status !== 'open') return message.reply(`✅ \`${todo.id}\` is already done.`);
     todo.status = 'done';
     todo.doneBy = message.author.id;
@@ -2248,11 +2281,150 @@ async function todoCommand(message, args) {
   }
   if (sub === 'add') {
     const text = args.slice(1).join(' ').trim();
-    if (!text) return message.reply('Usage: `!todo add <what needs doing>`');
+    if (!text) return message.reply('Usage: `/todo add <what needs doing>`');
     const todo = addTodo({ type: 'task', text, createdBy: message.author.id });
     return message.reply(`📌 Added \`${todo.id}\` to the to-do list.`);
   }
-  return message.reply(`**🗒️ Owner to-dos**\n\`!todo\` — list open items\n\`!todo add <text>\`\n\`!todo done <id>\``);
+  return message.reply(`**🗒️ Owner to-dos**\n\`/todo\` — list open items\n\`/todo add <text>\`\n\`/todo done <id>\``);
+}
+
+// ── Slash commands ────────────────────────────────────────────────────────────
+// Every command exists as a real `/command` as well as the `!command` prefix.
+// Both routes end in runCommand(), so there is exactly one implementation.
+//
+// Discord reserves the `/` composer for *registered* application commands — a
+// plain message starting with `/` is swallowed by the client and never reaches
+// the bot — so this list is the only way to answer `/…`.
+const OPT_TYPE = { STRING: 3, INTEGER: 4, USER: 6 };
+const strOpt = (name, description, required = false) => ({ type: OPT_TYPE.STRING, name, description, required });
+const intOpt = (name, description, required = false) => ({ type: OPT_TYPE.INTEGER, name, description, required });
+const userOpt = (name, description, required = true) => ({ type: OPT_TYPE.USER, name, description, required });
+/** Free text, split on spaces exactly like the `!` parser does. */
+const FREE_ARGS = [strOpt('args', 'Text, id or stage the command needs')];
+const slash = (name, description, options = FREE_ARGS) => ({ name, description, options });
+
+const SECRET_SLASH_COMMAND = { name: 'secret', description: '🤫 Owner-only. Reveals a private secret.' };
+
+const SLASH_COMMANDS = [
+  slash('help', 'Every command this bot answers to'),
+  slash('profile', 'Your level, gold, civilization, religion, team and cult'),
+  slash('balance', 'How much gold you are carrying'),
+  slash('daily', 'Claim your daily gold'),
+  slash('pay', 'Send gold to another member', [
+    userOpt('user', 'Who receives the gold'), intOpt('amount', 'How much gold', true)]),
+  slash('leaderboard', 'The ten richest members'),
+  slash('bounty', 'Put a gold bounty on a member', [
+    userOpt('user', 'Who the bounty is on'), intOpt('amount', 'Bounty in gold', true), strOpt('reason', 'Why they are wanted')]),
+  slash('bounties', 'Every active bounty'),
+  slash('claimbounty', 'Claim the bounty on a member', [userOpt('user', 'Who you are claiming on')]),
+  slash('poll', 'Start a poll: question | option | option'),
+  slash('vote', 'Vote on a poll', [strOpt('poll', 'Poll id', true), strOpt('choice', 'A or B')]),
+  slash('pollresults', 'Results for a poll', [strOpt('poll', 'Poll id', true)]),
+  slash('giveaway', 'Start, end or reroll a giveaway'),
+  slash('coinflip', 'Heads or tails'),
+  slash('roll', 'Roll a die', [intOpt('sides', 'How many sides, default 6')]),
+  slash('8ball', 'Ask the magic 8-ball'),
+  slash('rps', 'Play rock, paper or scissors', [strOpt('choice', 'rock, paper or scissors', true)]),
+  slash('createciv', 'Found a civilization with yourself as leader'),
+  slash('joinciv', 'Join a civilization'),
+  slash('civs', 'List every civilization'),
+  slash('leaveciv', 'Leave your civilization'),
+  slash('rebel', 'Declare yourself a rebel'),
+  slash('rebels', 'List the rebels'),
+  slash('foundreligion', 'Found a religion: name | doctrine'),
+  slash('joinreligion', 'Join a religion'),
+  slash('religions', 'List every religion'),
+  slash('pray', 'Pray to your god'),
+  slash('leavereligion', 'Leave your religion'),
+  slash('createteam', 'Create a team'),
+  slash('jointeam', 'Join a team'),
+  slash('teams', 'List every team'),
+  slash('leaveteam', 'Leave your team'),
+  slash('foundcult', 'Found a cult: name | secret objective'),
+  slash('joincult', 'Join a cult'),
+  slash('cults', 'List every cult'),
+  slash('ritual', 'Hold a cult ritual'),
+  slash('leavecult', 'Leave your cult'),
+  slash('kick', 'Kick a member out of your group', [userOpt('user', 'Who to kick')]),
+  slash('disband', 'Disband the group you lead'),
+  slash('promote', 'Promote a member of your group', [userOpt('user', 'Who to promote')]),
+  slash('title', 'Give a member a title', [userOpt('user', 'Who gets the title'), strOpt('text', 'The title')]),
+  slash('war', 'Declare war on a civilization'),
+  slash('ally', 'Propose an alliance'),
+  slash('joinevent', 'Join an event'),
+  slash('events', 'List the events'),
+  slash('treasury', 'Your group treasury'),
+  slash('deposit', 'Deposit gold into the treasury'),
+  slash('withdraw', 'Withdraw gold from the treasury'),
+  slash('link', 'Link your Minecraft account'),
+  slash('unlink', 'Unlink your Minecraft account'),
+  slash('mcplayers', 'Who is on the Minecraft server'),
+  slash('mcping', 'Is the Minecraft server up'),
+  slash('mcciv', 'Your civilization in game', [userOpt('user', 'Someone else, optional', false)]),
+  slash('reactapp', 'Spend a React Orb and order an item back', [
+    strOpt('action', 'Empty to start — or: status, list, view, comment, dim, approve, reject, stage, confirm, cancel'),
+    strOpt('rest', 'Id, text or delivery stage')]),
+  slash('todo', "The owners' to-do list", [
+    strOpt('action', 'list, add or done'), strOpt('rest', 'What needs doing, or the to-do id')]),
+];
+
+/** The full set a guild gets: the suite plus the owner-only secret. */
+const ALL_SLASH_COMMANDS = [...SLASH_COMMANDS, SECRET_SLASH_COMMAND];
+
+/**
+ * Slash options → the positional `args` array the command chain expects. Values
+ * are split on whitespace so a free-text option behaves like the rest of a
+ * `!command one two` line (a user option is already a bare id).
+ */
+function slashArgs(interaction) {
+  return interaction.options.data.flatMap(o => String(o.value).split(/\s+/).filter(Boolean));
+}
+
+/**
+ * Runs a slash command through the same chain as the `!` prefix. The reply is
+ * deferred immediately (a few commands take seconds), and the adapter below
+ * makes the interaction look enough like a message for runCommand().
+ */
+async function handleSlashCommand(interaction) {
+  if (!features.commandsEnabled) {
+    return interaction.reply({ content: '❌ Commands are disabled on this server.', ephemeral: true }).catch(() => {});
+  }
+  const deferred = await interaction.deferReply().then(() => true).catch(() => false);
+  let first = true;
+  const send = async (msg) => {
+    const payload = typeof msg === 'string' ? { content: msg } : msg;
+    try {
+      if (first) {
+        first = false;
+        return deferred ? await interaction.editReply(payload) : await interaction.reply(payload);
+      }
+      return await interaction.followUp(payload);
+    } catch (e) {
+      console.error(`Slash reply to /${interaction.commandName} failed: ${e.message}`);
+      return null;
+    }
+  };
+  const ctx = {
+    author: {
+      id: interaction.user.id,
+      username: interaction.user.username,
+      send: (msg) => interaction.user.send(msg),
+    },
+    member: interaction.member,
+    guild: interaction.guild,
+    channel: { id: interaction.channelId, send: (msg) => interaction.channel?.send(msg) },
+    content: '',
+    reply: send,
+    delete: () => Promise.resolve(),
+  };
+  try {
+    await runCommand(ctx, interaction.commandName, slashArgs(interaction));
+  } catch (e) {
+    console.error(`Slash command /${interaction.commandName} crashed:`, e.message);
+    await send(`❌ Something went wrong running \`/${interaction.commandName}\`.`);
+  }
+  // Leave no command stuck on "thinking…" when a branch answered nothing.
+  if (first) await send(deferred ? '✅ Done.' : '❌ That interaction could not be answered.');
 }
 
 client.on(Events.MessageCreate, async (message) => {
@@ -2283,6 +2455,15 @@ client.on(Events.MessageCreate, async (message) => {
 
   const args = message.content.slice(prefix.length).trim().split(/\s+/);
   const cmd  = args.shift().toLowerCase();
+  await runCommand(message, cmd, args);
+});
+
+/**
+ * The whole command chain. `message` is anything message-shaped: a real Discord
+ * message, or the small adapter built from a slash interaction (see
+ * handleSlashCommand) — that is how `/pay` and `/pay` share one implementation.
+ */
+async function runCommand(message, cmd, args) {
   const reply = (msg) => message.reply(msg);
   const guild = message.guild;
 
@@ -2341,7 +2522,7 @@ client.on(Events.MessageCreate, async (message) => {
   else if (cmd === 'bounty') {
     if (!features.bountyEnabled) return reply('❌ Bounties are disabled.');
     const target = args[0]; const amtStr = args[1]; const note = args.slice(2).join(' ');
-    if (!target || !amtStr) return reply('Usage: `!bounty @user <amount> [reason]`');
+    if (!target || !amtStr) return reply('Usage: `/bounty @user <amount> [reason]`');
     const targetId = target.replace(/[<@!>]/g, '');
     const r = await post('/api/bounties', { targetId, amount: Number(amtStr), placedBy: message.author.id, note });
     if (r.error) reply(`❌ ${r.error}`);
@@ -2356,7 +2537,7 @@ client.on(Events.MessageCreate, async (message) => {
   else if (cmd === 'claimbounty') {
     if (!features.bountyEnabled) return reply('❌ Bounties are disabled.');
     const target = args[0];
-    if (!target) return reply('Usage: `!claimbounty @user`');
+    if (!target) return reply('Usage: `/claimbounty @user`');
     const targetId = target.replace(/[<@!>]/g, '');
     const r = await post('/api/bounties/claim', { targetId, claimerId: message.author.id });
     if (r.error) reply(`❌ ${r.error}`);
@@ -2367,7 +2548,7 @@ client.on(Events.MessageCreate, async (message) => {
   else if (cmd === 'poll') {
     if (!features.pollsEnabled) return reply('❌ Polls are disabled.');
     const parts = args.join(' ').split('|').map(s => s.trim()).filter(Boolean);
-    if (parts.length < 3) return reply('Usage: `!poll <question> | <option1> | <option2> [| more options]`');
+    if (parts.length < 3) return reply('Usage: `/poll <question> | <option1> | <option2> [| more options]`');
     const question = parts[0];
     const options  = parts.slice(1);
     const r = await post('/api/polls', { question, options, createdBy: message.author.id });
@@ -2379,7 +2560,7 @@ client.on(Events.MessageCreate, async (message) => {
     const pollMsg = await target.send(
       `**📊 Poll #${r.pollId}** — *${question}*\n` +
       options.map((o, i) => `${LETTERS[i]} ${o}`).join('\n') +
-      `\nType \`!vote ${r.pollId} <A/B/C...>\` to vote!`
+      `\nType \`/vote ${r.pollId} <A/B/C...>\` to vote!`
     );
     data.polls[r.pollId].messageId = pollMsg.id;
     saveDb();
@@ -2388,7 +2569,7 @@ client.on(Events.MessageCreate, async (message) => {
   else if (cmd === 'vote') {
     if (!features.pollsEnabled) return reply('❌ Polls are disabled.');
     const [pollIdStr, optStr] = args;
-    if (!pollIdStr || !optStr) return reply('Usage: `!vote <pollId> <A/B/C...>`');
+    if (!pollIdStr || !optStr) return reply('Usage: `/vote <pollId> <A/B/C...>`');
     const poll = data.polls[pollIdStr];
     if (!poll) return reply('❌ Poll not found.');
     const LETTERS = ['A','B','C','D','E','F'];
@@ -2399,7 +2580,7 @@ client.on(Events.MessageCreate, async (message) => {
   }
   else if (cmd === 'pollresults') {
     const pollIdStr = args[0];
-    if (!pollIdStr) return reply('Usage: `!pollresults <pollId>`');
+    if (!pollIdStr) return reply('Usage: `/pollresults <pollId>`');
     const poll = data.polls[pollIdStr];
     if (!poll) return reply('❌ Poll not found.');
     const LETTERS = ['🇦','🇧','🇨','🇩','🇪','🇫'];
@@ -2452,10 +2633,10 @@ client.on(Events.MessageCreate, async (message) => {
     if (!durStr || !prize) {
       return reply(
         '**Usage:**\n' +
-        '`!giveaway <duration> <prize>` — members must react 🎉 to enter\n' +
-        '`!giveaway auto <duration> <prize>` — everyone is entered automatically\n' +
-        '`!giveaway react <duration> <prize>` — same as default (react to enter)\n\n' +
-        '**Examples:** `!giveaway 1h 500 gold` · `!giveaway auto 30m Legendary Title`\n' +
+        '`/giveaway <duration> <prize>` — members must react 🎉 to enter\n' +
+        '`/giveaway auto <duration> <prize>` — everyone is entered automatically\n' +
+        '`/giveaway react <duration> <prize>` — same as default (react to enter)\n\n' +
+        '**Examples:** `/giveaway 1h 500 gold` · `/giveaway auto 30m Legendary Title`\n' +
         '**Duration:** `30s` `5m` `2h` `1d`'
       );
     }
@@ -2512,7 +2693,7 @@ client.on(Events.MessageCreate, async (message) => {
       'Reply hazy, try again.','Ask again later.','Better not tell you now.','Cannot predict now.','Concentrate and ask again.',
       "Don't count on it.",'My reply is no.','My sources say no.','Outlook not so good.','Very doubtful.'];
     const q = args.join(' ');
-    if (!q) return reply('Usage: `!8ball <question>`');
+    if (!q) return reply('Usage: `/8ball <question>`');
     reply(`🎱 *${q}*\n**${ANSWERS[Math.floor(Math.random() * ANSWERS.length)]}**`);
   }
   else if (cmd === 'rps') {
@@ -2520,7 +2701,7 @@ client.on(Events.MessageCreate, async (message) => {
     const CHOICES = ['rock','paper','scissors'];
     const EMOJI = { rock:'🪨', paper:'📄', scissors:'✂️' };
     const player = args[0]?.toLowerCase();
-    if (!CHOICES.includes(player)) return reply('Usage: `!rps rock|paper|scissors`');
+    if (!CHOICES.includes(player)) return reply('Usage: `/rps rock|paper|scissors`');
     const bot = CHOICES[Math.floor(Math.random() * 3)];
     const beats = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
     const result = player === bot ? 'Tie!' : beats[player] === bot ? 'You win! 🎉' : 'You lose! 😢';
@@ -2666,7 +2847,7 @@ client.on(Events.MessageCreate, async (message) => {
     const teamId = u?.team;
     if (!teamId) return reply('❌ You are not on a team.');
     const team = data.teams[teamId];
-    if (String(team?.leaderId) === String(message.author.id)) return reply('❌ Captains cannot leave — use `!disband`.');
+    if (String(team?.leaderId) === String(message.author.id)) return reply('❌ Captains cannot leave — use `/disband`.');
     await post(`/api/teams/${teamId}/leave`, { userId: message.author.id });
     if (guild && team?.roleId) await removeRole(guild, message.author.id, team.roleId);
     reply(`🛡️ You have left team **${team?.name || 'your team'}**.`);
@@ -2718,7 +2899,7 @@ client.on(Events.MessageCreate, async (message) => {
     const cultId = u?.cult;
     if (!cultId) return reply('❌ You are not in a cult.');
     const cult = data.cults[cultId];
-    if (String(cult?.leaderId) === String(message.author.id)) return reply('❌ The leader cannot abandon the cult — use `!disband`.');
+    if (String(cult?.leaderId) === String(message.author.id)) return reply('❌ The leader cannot abandon the cult — use `/disband`.');
     await post(`/api/cults/${cultId}/leave`, { userId: message.author.id });
     if (guild && cult?.roleId) await removeRole(guild, message.author.id, cult.roleId);
     reply(`🌑 You have defected from **${cult?.name || 'the cult'}**. They will not forget.`);
@@ -2730,7 +2911,7 @@ client.on(Events.MessageCreate, async (message) => {
     const civId = u?.civilization;
     if (!civId) return reply('❌ You are not in a civilization.');
     const civ = data.civilizations[civId];
-    if (String(civ?.leaderId) === String(message.author.id)) return reply('❌ Leaders cannot leave — use `!disband`.');
+    if (String(civ?.leaderId) === String(message.author.id)) return reply('❌ Leaders cannot leave — use `/disband`.');
     await post(`/api/civilizations/${civId}/leave`, { userId: message.author.id });
     if (guild && civ?.roleId) await removeRole(guild, message.author.id, civ.roleId);
     reply(`✅ You have left **${civ?.name || 'your civilization'}**.`);
@@ -2903,7 +3084,7 @@ client.on(Events.MessageCreate, async (message) => {
   // ── Minecraft Bridge ──────────────────────────────────────────────────────────
   else if (cmd === 'link') {
     const code = args[0];
-    if (!code) return reply('Usage: `!link <code>` — get your code in Minecraft with `/link`');
+    if (!code) return reply('Usage: `/link <code>` — get your code in Minecraft with `/link`');
     if (!/^\d{6}$/.test(code)) return reply('❌ Code must be 6 digits. Get it in Minecraft with `/link`.');
     const res = await fetch(`http://localhost:${API_PORT}/api/mc/link/confirm`, {
       method: 'POST',
@@ -2958,24 +3139,25 @@ client.on(Events.MessageCreate, async (message) => {
 
   // ── Help ──────────────────────────────────────────────────────────────────────
   else if (cmd === 'help') {
-    const lines = ['**📜 Available Commands:**\n', '`!profile` `!help`'];
-    if (features.economyEnabled) lines.push('**💰 Economy:** `!balance` `!daily` `!pay @user <amt>` `!leaderboard` `!treasury` `!deposit <amt>` `!withdraw <amt>`');
-    if (features.bountyEnabled)    lines.push('**🎯 Bounties:** `!bounty @user <amt> [reason]` `!bounties` `!claimbounty @user`');
-    if (features.giveawaysEnabled) lines.push('**🎉 Giveaways:** `!giveaway <dur> <prize>` (react) · `!giveaway auto <dur> <prize>` (auto-enter all) · `!giveaway end` · `!giveaway reroll`');
-    if (features.pollsEnabled)   lines.push('**📊 Polls:** `!poll <question> | <opt1> | <opt2>` `!vote <id> <A/B>` `!pollresults <id>`');
-    if (features.funCommandsEnabled) lines.push('**🎮 Fun:** `!coinflip` `!roll [sides]` `!8ball <question>` `!rps rock|paper|scissors`');
-    if (features.civilizationsEnabled) lines.push(`**🏛️ Civs:** \`!createciv <n>\` \`!joinciv <id>\` \`!leaveciv\` \`!civs\`${features.rebelsEnabled ? ' `!rebel [reason]` `!rebels`' : ''}`);
-    if (features.religionsEnabled) lines.push('**✝️ Religion:** `!foundreligion <n>|<doctrine>` `!joinreligion <id>` `!leavereligion` `!religions` `!pray`');
-    if (features.teamsEnabled)    lines.push('**🛡️ Teams:** `!createteam <n>` `!jointeam <id>` `!leaveteam` `!teams`');
-    if (features.cultsEnabled)    lines.push('**🌑 Cults:** `!foundcult <n>|<obj>` `!joincult <id>` `!leavecult` `!cults` `!ritual`');
-    if (features.warsEnabled)     lines.push('**⚔️ Diplomacy:** `!war <civId>` `!ally <civId>`');
-    if (features.eventsEnabled)   lines.push('**📅 Events:** `!joinevent <id>` `!events`');
-    lines.push('**🎬 React:** `!Reactapp` — apply for a React in DMs · `!reactapp status`');
-    lines.push('**👑 Owners/admins:** `!reactapp list` `!reactapp view <id>` `!reactapp comment <id> <txt>` `!reactapp dim <id> <txt>` `!reactapp approve|reject <id>` · `!todo` · `!promote @user` `!kick @user` `!disband` `!title @user <title>`');
-    if (features.bridgeEnabled)     lines.push('**🎮 Minecraft:** `!link <code>` `!unlink` `!mcplayers` `!mcping` `!mcciv [@user]`');
+    const lines = ['**📜 Available Commands** — type `/` in Discord to pick one\n', '`/profile` `/help`'];
+    if (features.economyEnabled) lines.push('**💰 Economy:** `/balance` `/daily` `/pay @user <amt>` `/leaderboard` `/treasury` `/deposit <amt>` `/withdraw <amt>`');
+    if (features.bountyEnabled)    lines.push('**🎯 Bounties:** `/bounty @user <amt> [reason]` `/bounties` `/claimbounty @user`');
+    if (features.giveawaysEnabled) lines.push('**🎉 Giveaways:** `/giveaway <dur> <prize>` (react) · `/giveaway auto <dur> <prize>` (auto-enter all) · `/giveaway end` · `/giveaway reroll`');
+    if (features.pollsEnabled)   lines.push('**📊 Polls:** `/poll <question> | <opt1> | <opt2>` `/vote <id> <A/B>` `/pollresults <id>`');
+    if (features.funCommandsEnabled) lines.push('**🎮 Fun:** `/coinflip` `/roll [sides]` `/8ball <question>` `/rps rock|paper|scissors`');
+    if (features.civilizationsEnabled) lines.push(`**🏛️ Civs:** \`/createciv <n>\` \`/joinciv <id>\` \`/leaveciv\` \`/civs\`${features.rebelsEnabled ? ' `/rebel [reason]` `/rebels`' : ''}`);
+    if (features.religionsEnabled) lines.push('**✝️ Religion:** `/foundreligion <n>|<doctrine>` `/joinreligion <id>` `/leavereligion` `/religions` `/pray`');
+    if (features.teamsEnabled)    lines.push('**🛡️ Teams:** `/createteam <n>` `/jointeam <id>` `/leaveteam` `/teams`');
+    if (features.cultsEnabled)    lines.push('**🌑 Cults:** `/foundcult <n>|<obj>` `/joincult <id>` `/leavecult` `/cults` `/ritual`');
+    if (features.warsEnabled)     lines.push('**⚔️ Diplomacy:** `/war <civId>` `/ally <civId>`');
+    if (features.eventsEnabled)   lines.push('**📅 Events:** `/joinevent <id>` `/events`');
+    lines.push('**🎬 React Orbs:** `/reactapp` — spend an orb and order an item back (the interview happens in DMs) · `/reactapp status`');
+    lines.push('**👑 Owners/admins:** `/reactapp list|view|comment|dim|approve|reject|stage` · `/todo [add|done]` · `/promote @user` `/kick @user` `/disband` `/title @user <title>`');
+    if (features.bridgeEnabled)     lines.push('**🎮 Minecraft:** `/link <code>` `/unlink` `/mcplayers` `/mcping` `/mcciv [@user]`');
+    lines.push('\n*Every command also still works with the old `!` prefix.*');
     reply(lines.join('\n'));
   }
-});
+}
 
 client.on(Events.Error, (err) => console.error('❌ Bot error:', err));
 
